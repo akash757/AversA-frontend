@@ -1,0 +1,70 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#090D16"/>
+      <stop offset="50%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </linearGradient>
+    <linearGradient id="primary-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="50%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="600" cy="315" r="450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#090D16" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="600" cy="315" r="450" fill="url(#glow)"/>
+
+  <!-- Grid decoration lines -->
+  <g opacity="0.1" stroke="#60A5FA" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="525" x2="1200" y2="525"/>
+    <line x1="200" y1="0" x2="200" y2="630"/>
+    <line x1="400" y1="0" x2="400" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="800" y1="0" x2="800" y2="630"/>
+    <line x1="1000" y1="0" x2="1000" y2="630"/>
+  </g>
+
+  <!-- Central Emblem -->
+  <g transform="translate(560, 95) scale(1.7)">
+    <path d="M24 3.5L42 13.8V34.2L24 44.5L6 34.2V13.8L24 3.5Z" stroke="url(#primary-grad)" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M24 10L14 34H19.5L24 23L28.5 34H34L24 10Z" stroke="url(#primary-grad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="#3B82F6" fill-opacity="0.15"/>
+    <path d="M17.5 27.5H30.5" stroke="url(#primary-grad)" stroke-width="2.2" stroke-linecap="round"/>
+    <circle cx="24" cy="24" r="3.5" fill="#38BDF8"/>
+    <circle cx="24" cy="24" r="1.5" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Category Pill -->
+  <rect x="420" y="210" width="360" height="38" rx="19" fill="#1E293B" fill-opacity="0.8" stroke="#3B82F6" stroke-width="1.2"/>
+  <circle cx="440" cy="229" r="4.5" fill="#38BDF8"/>
+  <text x="456" y="234" fill="#93C5FD" font-family="system-ui, sans-serif" font-size="13" font-weight="700" letter-spacing="1.5">AI PRODUCT MANAGEMENT PLATFORM</text>
+
+  <!-- Brand Wordmark -->
+  <text x="600" y="340" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="94" font-weight="900" letter-spacing="-2">
+    <tspan fill="#3B82F6">A</tspan><tspan fill="#FFFFFF">vers</tspan><tspan fill="#3B82F6">A</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="600" y="405" text-anchor="middle" fill="#F8FAFC" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="700">
+    Turn Client Discovery Conversations into Shipped Products
+  </text>
+
+  <text x="600" y="445" text-anchor="middle" fill="#94A3B8" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="400">
+    Discovery Matrix • Automated Requirements • Google Meet Sync • Delivery Roadmaps
+  </text>
+
+  <!-- Footer indicator -->
+  <text x="600" y="550" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="14" font-weight="600" letter-spacing="1">
+    AVERSA.AI • AUTONOMOUS PRODUCT INTELLIGENCE
+  </text>
+</svg>
+

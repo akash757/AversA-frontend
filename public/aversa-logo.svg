@@ -1,0 +1,27 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="aversa-grad-primary" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="35%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#4F46E5" />
+    </linearGradient>
+    <linearGradient id="aversa-grad-secondary" x1="42" y1="6" x2="6" y2="42" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60A5FA" />
+      <stop offset="50%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#1E40AF" />
+    </linearGradient>
+    <linearGradient id="aversa-core-glow" x1="18" y1="18" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#93C5FD" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+  </defs>
+  <path d="M24 3.5L42 13.8V34.2L24 44.5L6 34.2V13.8L24 3.5Z" stroke="url(#aversa-grad-primary)" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M14 36L22 13H26L34 36H28.5L26.8 30.5H21.2L19.5 36H14Z" fill="url(#aversa-grad-secondary)" fill-opacity="0.14"/>
+  <path d="M24 10L14 34H19.5L24 23L28.5 34H34L24 10Z" stroke="url(#aversa-grad-primary)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M17.5 27.5H30.5" stroke="url(#aversa-grad-primary)" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="24" cy="24" r="3.5" fill="url(#aversa-core-glow)"/>
+  <circle cx="24" cy="24" r="1.6" fill="#FFFFFF"/>
+  <circle cx="24" cy="5" r="1.4" fill="#38BDF8"/>
+  <circle cx="24" cy="43" r="1.4" fill="#4F46E5"/>
+</svg>
+
