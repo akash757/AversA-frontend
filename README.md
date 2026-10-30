@@ -1,4 +1,4 @@
-# Thunder Agents Frontend
+# AversA Agents Frontend
 
 Autonomous SDLC Platform - Frontend Web Application built with [Next.js](https://nextjs.org) and Tailwind CSS.
 
@@ -37,7 +37,7 @@ npm run start
 ### Running with PM2 on AWS EC2:
 ```bash
 npm install -g pm2
-pm2 start npm --name "thunder-frontend" -- start -- -p 3000
+pm2 start npm --name "AversA-frontend" -- start -- -p 3000
 pm2 save
 pm2 startup
 ```
