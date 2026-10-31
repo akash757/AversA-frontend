@@ -10,6 +10,9 @@ import ProjectCard from "@/components/dashboard/ProjectCard";
 import MeetingCard from "@/components/meetings/MeetingCard";
 import CreateProjectModal from "@/components/project/CreateProjectModal";
 import Loader from "@/components/Ui/Loader";
+import Button from "@/components/Ui/Button";
+import Card from "@/components/Ui/Card";
+import Badge from "@/components/Ui/Badge";
 import {
   FolderIcon,
   CalendarDaysIcon,
@@ -17,8 +20,6 @@ import {
   PlusIcon,
   SparklesIcon,
   ArrowRightIcon,
-  CheckCircleIcon,
-  ClockIcon,
   ChartBarIcon,
 } from "@heroicons/react/24/outline";
 
@@ -80,12 +81,10 @@ export default function DashboardPage() {
     (p) => p.status !== "completed" && p.status !== "cancelled"
   );
 
-  // Discovery stages breakdown
   const dayOneCount = projects.filter((p) => p.stage === "day_one").length;
   const deepDiscoveryCount = projects.filter((p) => p.stage === "discovery").length;
   const confirmedCount = projects.filter((p) => p.stage === "requirements_confirmed").length;
 
-  // Filtered projects for the recent grid
   const filteredProjects = projects.filter((p) => {
     if (projectTab === "all") return true;
     if (projectTab === "in_progress") return p.status === "in_progress";
@@ -94,84 +93,83 @@ export default function DashboardPage() {
   }).slice(0, 4);
 
   return (
-    <div className="space-y-7">
-      {/* Premium Welcome Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl border border-gray-200/80 bg-linear-to-br from-white via-blue-50/20 to-indigo-50/20 p-6 sm:p-8 shadow-xs">
+    <div className="space-y-7 animate-fade-in">
+      {/* ── Welcome Hero Banner ──────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl border border-[#E2E8F0] bg-white p-6 sm:p-8 shadow-xs">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-200/80 bg-blue-50/80 px-3 py-1 text-xs font-semibold text-[#2563EB] mb-3 shadow-2xs">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2563EB]" />
-              </span>
-              <span>AversA Product Operations Suite</span>
+            <div className="mb-2.5">
+              <Badge variant="brand" size="sm" dot>
+                AversA Product Intelligence
+              </Badge>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-900">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0F172A] font-display">
               {greetingTime}, {user?.firstName || "Operator"}
             </h1>
-            <p className="mt-2 text-xs sm:text-sm text-gray-600 leading-relaxed">
+            <p className="mt-2 text-xs sm:text-sm text-[#475569] leading-relaxed">
               Orchestrate client discovery questionnaires, coordinate alignment meetings, and turn client vision into verified delivery roadmaps.
             </p>
           </div>
 
           {/* Quick Actions */}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              variant="primary"
+              size="md"
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-gray-900/10 hover:bg-[#2563EB] hover:shadow-blue-500/20 transition active:scale-95 cursor-pointer"
+              leftIcon={<PlusIcon className="h-4 w-4" />}
             >
-              <PlusIcon className="h-4 w-4 stroke-2" />
-              <span>New Project</span>
-            </button>
+              New Project
+            </Button>
 
-            <Link
+            <Button
+              variant="outline"
+              size="md"
               href="/meetings"
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition shadow-2xs"
+              leftIcon={<CalendarDaysIcon className="h-4 w-4 text-[#059669]" />}
             >
-              <CalendarDaysIcon className="h-4 w-4 text-emerald-600" />
-              <span>Schedule Call</span>
-            </Link>
+              Schedule Call
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* KPI Stats Grid */}
+      {/* ── KPI Stats Grid ───────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Projects */}
         <Link
           href="/projects"
-          className="group rounded-2xl border border-gray-200/80 bg-white p-5 shadow-2xs transition hover:border-[#2563EB] hover:shadow-md"
+          className="group rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-xs transition hover:border-[#2563EB] hover:shadow-md hover:-translate-y-0.5"
         >
           <div className="flex items-center justify-between">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#2563EB] group-hover:bg-[#2563EB] group-hover:text-white transition">
               <FolderIcon className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+            <Badge variant="success" size="sm">
               {activeProjects.length} Active
-            </span>
+            </Badge>
           </div>
-          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-gray-400">
+          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
             Total Projects
           </p>
-          <p className="text-3xl font-black text-gray-900 mt-0.5">{projects.length}</p>
+          <p className="text-3xl font-extrabold text-[#0F172A] mt-0.5 font-display">{projects.length}</p>
         </Link>
 
         {/* Discovery Pipeline */}
-        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-2xs">
+        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
               <SparklesIcon className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+            <Badge variant="violet" size="sm">
               Day 1 & Deep
-            </span>
+            </Badge>
           </div>
-          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-gray-400">
+          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
             In Discovery
           </p>
-          <p className="text-3xl font-black text-gray-900 mt-0.5">
+          <p className="text-3xl font-extrabold text-[#0F172A] mt-0.5 font-display">
             {dayOneCount + deepDiscoveryCount}
           </p>
         </div>
@@ -179,53 +177,53 @@ export default function DashboardPage() {
         {/* Alignment Sessions */}
         <Link
           href="/meetings"
-          className="group rounded-2xl border border-gray-200/80 bg-white p-5 shadow-2xs transition hover:border-[#2563EB] hover:shadow-md"
+          className="group rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-xs transition hover:border-[#2563EB] hover:shadow-md hover:-translate-y-0.5"
         >
           <div className="flex items-center justify-between">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 group-hover:bg-cyan-600 group-hover:text-white transition">
               <CalendarDaysIcon className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-700 bg-cyan-50 border border-cyan-200 px-2 py-0.5 rounded-full">
+            <Badge variant="brand" size="sm">
               {upcomingMeetings.length} Upcoming
-            </span>
+            </Badge>
           </div>
-          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-gray-400">
+          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
             Alignment Sessions
           </p>
-          <p className="text-3xl font-black text-gray-900 mt-0.5">{meetings.length}</p>
+          <p className="text-3xl font-extrabold text-[#0F172A] mt-0.5 font-display">{meetings.length}</p>
         </Link>
 
         {/* Team Members */}
         <Link
           href="/users"
-          className="group rounded-2xl border border-gray-200/80 bg-white p-5 shadow-2xs transition hover:border-[#2563EB] hover:shadow-md"
+          className="group rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-xs transition hover:border-[#2563EB] hover:shadow-md hover:-translate-y-0.5"
         >
           <div className="flex items-center justify-between">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition">
               <UsersIcon className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+            <Badge variant="neutral" size="sm">
               Organization
-            </span>
+            </Badge>
           </div>
-          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-gray-400">
+          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
             Team Members
           </p>
-          <p className="text-3xl font-black text-gray-900 mt-0.5">{userCount}</p>
+          <p className="text-3xl font-extrabold text-[#0F172A] mt-0.5 font-display">{userCount}</p>
         </Link>
       </div>
 
-      {/* Discovery Stage Funnel Bar */}
+      {/* ── Discovery Stage Funnel Card ──────────────────── */}
       {projects.length > 0 && (
-        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-2xs">
+        <Card variant="default" className="p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
               <ChartBarIcon className="h-4 w-4 text-[#2563EB]" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#0F172A]">
                 Discovery Stage Funnel
               </h3>
             </div>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-[#64748B]">
               {confirmedCount} of {projects.length} engagements confirmed for execution
             </span>
           </div>
@@ -261,27 +259,26 @@ export default function DashboardPage() {
               <p className="mt-1 text-[11px] text-emerald-600">Ready for sprint delivery</p>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Main Two-Column Layout */}
+      {/* ── Main Two-Column Layout ───────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-7">
         {/* Left Column: Recent Projects */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h2 className="text-base font-bold text-gray-900 tracking-tight">Active Projects</h2>
-              <p className="text-xs text-gray-500">Stage Discovery & Scope Orchestration</p>
+              <h2 className="text-base font-bold text-[#0F172A] font-display">Active Projects</h2>
+              <p className="text-xs text-[#64748B]">Stage Discovery & Scope Orchestration</p>
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Quick Tab Filter */}
-              <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1 text-xs">
+              <div className="inline-flex rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-1 text-xs">
                 <button
                   type="button"
                   onClick={() => setProjectTab("all")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                    projectTab === "all" ? "bg-white text-gray-900 shadow-2xs font-semibold" : "text-gray-500 hover:text-gray-900"
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    projectTab === "all" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
                   }`}
                 >
                   All
@@ -289,8 +286,8 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setProjectTab("in_progress")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                    projectTab === "in_progress" ? "bg-white text-gray-900 shadow-2xs font-semibold" : "text-gray-500 hover:text-gray-900"
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    projectTab === "in_progress" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
                   }`}
                 >
                   In Progress
@@ -298,8 +295,8 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setProjectTab("planning")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                    projectTab === "planning" ? "bg-white text-gray-900 shadow-2xs font-semibold" : "text-gray-500 hover:text-gray-900"
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    projectTab === "planning" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
                   }`}
                 >
                   Planning
@@ -308,7 +305,7 @@ export default function DashboardPage() {
 
               <Link
                 href="/projects"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#2563EB] hover:text-[#1d4ed8] transition"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#2563EB] hover:text-blue-700 transition"
               >
                 <span>View all</span>
                 <ArrowRightIcon className="h-3 w-3" />
@@ -317,18 +314,20 @@ export default function DashboardPage() {
           </div>
 
           {projects.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-gray-500 shadow-2xs">
-              <FolderIcon className="mx-auto h-10 w-10 text-gray-300 mb-2" />
-              <p className="text-sm font-semibold text-gray-900">No projects created yet</p>
+            <div className="rounded-2xl border border-dashed border-[#E2E8F0] bg-white p-10 text-center text-[#64748B] shadow-xs">
+              <FolderIcon className="mx-auto h-10 w-10 text-[#CBD5E1] mb-2" />
+              <p className="text-sm font-semibold text-[#0F172A]">No projects created yet</p>
               <p className="mt-1 text-xs">Start by creating your first client project.</p>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(true)}
-                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#2563EB] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#1d4ed8] transition cursor-pointer"
-              >
-                <PlusIcon className="h-4 w-4" />
-                <span>Create New Project</span>
-              </button>
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowCreateModal(true)}
+                  leftIcon={<PlusIcon className="h-4 w-4" />}
+                >
+                  Create New Project
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -343,12 +342,12 @@ export default function DashboardPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-bold text-gray-900 tracking-tight">Upcoming Calls</h2>
-              <p className="text-xs text-gray-500">Google Meet Alignments</p>
+              <h2 className="text-base font-bold text-[#0F172A] font-display">Upcoming Calls</h2>
+              <p className="text-xs text-[#64748B]">Google Meet Alignments</p>
             </div>
             <Link
               href="/meetings"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-[#2563EB] hover:text-[#1d4ed8] transition"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[#2563EB] hover:text-blue-700 transition"
             >
               <span>All calls</span>
               <ArrowRightIcon className="h-3 w-3" />
@@ -356,17 +355,20 @@ export default function DashboardPage() {
           </div>
 
           {upcomingMeetings.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-gray-500 shadow-2xs">
-              <CalendarDaysIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-              <p className="text-sm font-semibold text-gray-900">No upcoming calls</p>
+            <div className="rounded-2xl border border-dashed border-[#E2E8F0] bg-white p-8 text-center text-[#64748B] shadow-xs">
+              <CalendarDaysIcon className="mx-auto h-8 w-8 text-[#CBD5E1] mb-2" />
+              <p className="text-sm font-semibold text-[#0F172A]">No upcoming calls</p>
               <p className="mt-1 text-xs">You have no meetings scheduled for today.</p>
-              <Link
-                href="/meetings"
-                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gray-950 px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#2563EB] transition"
-              >
-                <PlusIcon className="h-4 w-4" />
-                <span>Schedule a Call</span>
-              </Link>
+              <div className="mt-3 flex justify-center">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  href="/meetings"
+                  leftIcon={<PlusIcon className="h-4 w-4" />}
+                >
+                  Schedule a Call
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -378,7 +380,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Redesigned 2-Step Create Project Modal triggered directly from Dashboard */}
       <CreateProjectModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}

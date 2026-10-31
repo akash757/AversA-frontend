@@ -10,20 +10,20 @@ import {
 
 const agents = [
   {
-    name: "Product Agent",
-    role: "Requirements · Estimates · Proposals",
+    name: "Product Management Agent",
+    role: "Requirements · PRDs · Estimates · Proposals",
     status: "live",
     icon: LightBulbIcon,
     description:
-      "Analyzes transcripts, extracts requirements, estimates effort, and drafts client proposals.",
+      "Analyzes transcripts, extracts requirements, drafts verified PRDs, estimates effort, and generates client proposals.",
   },
   {
-    name: "Project Agent",
-    role: "Sprints · Sequencing · Unblocking",
+    name: "Project Management Agent",
+    role: "Sprints · SDLC Sequencing · Unblocking",
     status: "soon",
     icon: ClipboardDocumentListIcon,
     description:
-      "Turns the plan into milestones, sprints, and sequenced execution across the team.",
+      "Turns discovery into milestones, sprints, and sequenced execution across the software development lifecycle.",
   },
   {
     name: "Developer Agent",
@@ -66,7 +66,7 @@ export default function AgentCrew() {
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-gray-600 sm:text-base">
               AversA starts with a production-ready Product Management Agent.
-              The rest of the crew is on the roadmap — same platform, expanding autonomy.
+              The rest of the crew is on the roadmap — same platform, expanding autonomy across the entire Software Development Lifecycle (SDLC).
             </p>
           </div>
         </ScrollReveal>

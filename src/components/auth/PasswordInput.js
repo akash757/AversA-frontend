@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import FormField from "@/components/Ui/FormField";
 
 export default function PasswordInput({
   label = "Password",
@@ -10,6 +11,7 @@ export default function PasswordInput({
   className = "",
   showStrength = false,
   value = "",
+  required,
   ...props
 }) {
   const [show, setShow] = useState(false);
@@ -17,32 +19,42 @@ export default function PasswordInput({
 
   const strength = getStrength(value);
 
+  const errorClass = error
+    ? "border-[#DC2626] focus:border-[#DC2626] focus:shadow-[0_0_0_3px_#FFF1F2]"
+    : "border-[#E2E8F0] hover:border-[#CBD5E1] focus:border-[#2563EB] focus:shadow-[0_0_0_3px_#EFF6FF]";
+
   return (
-    <div className={className}>
-      {label && (
-        <label htmlFor={inputId} className="mb-1.5 block text-sm font-semibold text-gray-700">
-          {label}
-        </label>
-      )}
+    <FormField
+      label={label}
+      htmlFor={inputId}
+      required={required}
+      error={error}
+      className={className}
+    >
       <div className="relative">
         <input
           id={inputId}
           type={show ? "text" : "password"}
           value={value}
-          className={`h-11 w-full rounded-xl border bg-white px-3.5 pr-11 text-sm text-gray-900 placeholder:text-gray-400 transition focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-            error
-              ? "border-rose-300 focus:border-rose-400"
-              : "border-gray-200 focus:border-blue-500"
-          }`}
+          className={[
+            "input-base block h-11 w-full rounded-[10px] px-3.5 pr-11 text-sm text-[#0F172A]",
+            "placeholder:text-[#CBD5E1] bg-white transition-all duration-150",
+            "disabled:bg-[#F8FAFC] disabled:text-[#94A3B8] disabled:cursor-not-allowed",
+            errorClass,
+          ].join(" ")}
+          aria-invalid={!!error}
           {...props}
         />
         <button
           type="button"
-          onClick={() => setShow(!show)}
-          className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 hover:text-gray-700"
+          onClick={() => setShow((v) => !v)}
+          className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-[#94A3B8] hover:text-[#475569] transition-colors"
           aria-label={show ? "Hide password" : "Show password"}
         >
-          {show ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+          {show
+            ? <EyeSlashIcon className="h-4.5 w-4.5" />
+            : <EyeIcon className="h-4.5 w-4.5" />
+          }
         </button>
       </div>
 
@@ -52,20 +64,19 @@ export default function PasswordInput({
             {[0, 1, 2, 3].map((i) => (
               <div
                 key={i}
-                className={`h-1 flex-1 rounded-full transition ${
-                  i < strength.score ? strength.color : "bg-gray-200"
-                }`}
+                className={[
+                  "h-1 flex-1 rounded-full transition-all duration-300",
+                  i < strength.score ? strength.color : "bg-[#F1F5F9]",
+                ].join(" ")}
               />
             ))}
           </div>
-          <p className={`mt-1.5 text-xs font-medium ${strength.textColor}`}>
+          <p className={`mt-1.5 text-xs font-semibold ${strength.textColor}`}>
             {strength.label}
           </p>
         </div>
       )}
-
-      {error && <p className="mt-1.5 text-xs font-medium text-rose-600">{error}</p>}
-    </div>
+    </FormField>
   );
 }
 
@@ -76,14 +87,8 @@ function getStrength(password) {
   if (/\d/.test(password)) score += 1;
   if (/[^A-Za-z0-9]/.test(password)) score += 1;
 
-  if (score <= 1) {
-    return { score, label: "Weak", color: "bg-rose-500", textColor: "text-rose-600" };
-  }
-  if (score === 2) {
-    return { score, label: "Fair", color: "bg-amber-500", textColor: "text-amber-600" };
-  }
-  if (score === 3) {
-    return { score, label: "Good", color: "bg-blue-500", textColor: "text-blue-600" };
-  }
-  return { score, label: "Strong", color: "bg-emerald-500", textColor: "text-emerald-600" };
+  if (score <= 1) return { score, label: "Weak",   color: "bg-[#DC2626]", textColor: "text-[#DC2626]" };
+  if (score === 2) return { score, label: "Fair",   color: "bg-[#D97706]", textColor: "text-[#D97706]" };
+  if (score === 3) return { score, label: "Good",   color: "bg-[#2563EB]", textColor: "text-[#2563EB]" };
+  return              { score, label: "Strong", color: "bg-[#059669]", textColor: "text-[#059669]" };
 }

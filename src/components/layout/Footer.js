@@ -10,12 +10,13 @@ const footerLinks = {
   ],
   Company: [
     { label: "How It Works", href: "/how-it-works" },
-    { label: "Contact", href: "/contact" },
-    { label: "Support", href: "/contact" },
+    { label: "Contact Us", href: "/contact" },
+    { label: "Enterprise Support", href: "/contact" },
   ],
   Legal: [
     { label: "Privacy Policy", href: "/privacy" },
     { label: "Terms of Service", href: "/terms" },
+    { label: "Cookie & Consent", href: "/consent" },
   ],
 };
 
@@ -29,8 +30,7 @@ export default function Footer() {
               <AversALogo size="sm" showTagline={true} inverted />
             </Link>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-400">
-              The AI product management platform that turns client conversations into
-              requirements, estimates, proposals, and shippable work.
+              The autonomous AI product management and project management agent that powers the complete software development lifecycle (SDLC) — from client discovery to shipped code.
             </p>
             <div className="mt-6 flex items-center gap-3">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-400">
@@ -65,7 +65,7 @@ export default function Footer() {
           <p className="text-xs text-slate-500">
             © {new Date().getFullYear()} AversA Platform Inc. All rights reserved.
           </p>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap gap-6">
             <Link
               href="/privacy"
               className="text-xs text-slate-500 transition-colors hover:text-slate-300"
@@ -77,6 +77,18 @@ export default function Footer() {
               className="text-xs text-slate-500 transition-colors hover:text-slate-300"
             >
               Terms of Service
+            </Link>
+            <Link
+              href="/consent"
+              className="text-xs text-slate-500 transition-colors hover:text-slate-300"
+            >
+              Cookie Preferences
+            </Link>
+            <Link
+              href="/contact"
+              className="text-xs text-slate-500 transition-colors hover:text-slate-300"
+            >
+              Contact Us
             </Link>
           </div>
         </div>

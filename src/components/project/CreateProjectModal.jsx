@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Ui/Toast";
 import TagInput from "@/components/Ui/TagInput";
 import ModernDateInput from "@/components/Ui/ModernDateInput";
+import Button from "@/components/Ui/Button";
 import { createProject } from "@/features/project/project";
 import {
   XMarkIcon,
@@ -340,21 +341,23 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }) {
 
             {/* Modal Step 1 Action Bar */}
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 type="button"
                 onClick={handleClose}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
               >
                 Cancel
-              </button>
+              </Button>
 
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 type="submit"
-                className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 transition active:scale-95"
+                rightIcon={<ArrowRightIcon className="h-3.5 w-3.5" />}
               >
-                <span>Continue to Step 2</span>
-                <ArrowRightIcon className="h-3.5 w-3.5" />
-              </button>
+                Continue to Step 2
+              </Button>
             </div>
           </form>
         )}
@@ -443,32 +446,25 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }) {
 
             {/* Modal Step 2 Action Bar */}
             <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 type="button"
                 onClick={() => setStep(1)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+                leftIcon={<ArrowLeftIcon className="h-3.5 w-3.5" />}
               >
-                <ArrowLeftIcon className="h-3.5 w-3.5" />
-                <span>Back to Essentials</span>
-              </button>
+                Back to Essentials
+              </Button>
 
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 type="submit"
-                disabled={isSubmitting}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] px-6 py-2.5 text-xs font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 transition disabled:opacity-50 active:scale-95"
+                loading={isSubmitting}
+                leftIcon={<SparklesIcon className="h-4 w-4" />}
               >
-                {isSubmitting ? (
-                  <>
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    <span>Creating Project…</span>
-                  </>
-                ) : (
-                  <>
-                    <SparklesIcon className="h-4 w-4" />
-                    <span>Create Project</span>
-                  </>
-                )}
-              </button>
+                Create Project
+              </Button>
             </div>
           </form>
         )}
