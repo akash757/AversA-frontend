@@ -7,7 +7,7 @@ Autonomous SDLC Platform - Frontend Web Application built with [Next.js](https:/
 
 1. Install dependencies:
 ```bash
-npm install
+npm installl
 ```
 
 2. Configure environment:
