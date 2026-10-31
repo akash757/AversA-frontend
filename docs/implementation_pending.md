@@ -86,17 +86,14 @@ Once speakers are mapped, the transcript can be analyzed by the Gemini 2.5 Flash
 
 ### Background & Backend Contract
 Extracted knowledge items are persisted in the database with status `proposed`:
-- **`GET /api/items?projectId=:projectId&transcriptId=:transcriptId`**: Returns list of `ExtractedItem` objects.
-- **`PATCH /api/items/:itemId/status`**: Updates status to `accepted` or `rejected`:
-  ```json
-  { "status": "accepted" }
-  ```
-- **`GET /api/items/:itemId/evidence`**: Returns line numbers and corresponding `TranscriptUtterance` rows.
+- **`GET /api/transcripts/:id/items?type=&status=`**: Returns list of `ExtractedItem` objects filtered by valid enums (`action_item`, `decision`, `requirement`, `answer` and `proposed`, `accepted`, `rejected`).
+- **`PATCH /api/transcripts/items/:itemId`**: Updates status (`proposed`, `accepted`, `rejected`), text, and for action items: `ownerParticipantId` (or null) and `dueDate`. Supports `replaceAnswer: true` when accepting answers.
+- **`GET /api/transcripts/items/:itemId/evidence`**: Returns line numbers and corresponding `TranscriptUtterance` rows.
 
 ### Pending Frontend Implementation Steps
 - [ ] **3.1. Create `frontend/src/features/items/item.js`**:
-  - Implement `getProjectItems(projectId, params)`
-  - Implement `updateItemStatus(itemId, status)`
+  - Implement `getTranscriptItems(transcriptId, { type, status })`
+  - Implement `updateExtractedItem(itemId, { status, text, ownerParticipantId, dueDate, replaceAnswer })`
   - Implement `getItemEvidence(itemId)`
 - [ ] **3.2. Build `ExtractedItemsBoard.jsx` in `frontend/src/components/project/`**:
   - Category Filter Tabs:
@@ -105,14 +102,19 @@ Extracted knowledge items are persisted in the database with status `proposed`:
     - **Requirements** (client software capabilities).
     - **Action Items** (assigned tasks with due dates).
   - Item Card Layout:
-    - Verified text statement.
+    - Verified text statement (editable inline).
     - Confidence badge: `high` (green), `medium` (amber), `low` (gray).
     - Spoken due date & resolved ISO date (for action items).
-    - Owner chip (`ownerName` / participant).
+    - Owner chip / dropdown (`ownerParticipantId` scoped to project participants).
     - Citation Pill: e.g., `[Lines 14, 15]`.
     - Action buttons: "Accept" (Green checkmark) and "Reject" (Red cross).
 - [ ] **3.3. Build Line Evidence Drawer / Modal**:
   - Clicking on a citation pill opens a slide-over drawer displaying the verbatim dialogue turns from the meeting transcript, with cited lines highlighted.
+- [ ] **3.4. Handle 409 Conflict on Answer Acceptance**:
+  - When accepting an answer item returns HTTP 409 Conflict (`Question already has an answer`), prompt the user with a confirmation modal: *"This question was already answered. Replace the existing answer with this new answer?"*
+  - On user confirmation, resend request with `replaceAnswer: true`.
+- [ ] **3.5. Reactive Question Answer State Sync**:
+  - When an accepted answer item is rejected or reverted back to `proposed`, automatically refresh or synchronize the linked question in the Questions tab (which reverts to `pending` or `suggested`).
 
 ---
 
