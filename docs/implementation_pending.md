@@ -102,3 +102,4 @@ This document tracks client-side user interface, state management, and API integ
   - Available to `product_manager`, `admin`, and `superadmin`.
   - Pre-flight readiness check displays warning checklist for open questions, proposed items, and suggested follow-ups.
   - `acknowledgeWarnings: true` confirmation checkbox advances project stage to `requirements_confirmed`.
+

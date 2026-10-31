@@ -148,6 +148,82 @@ function toResponseEnvelope(payload, response) {
   };
 }
 
+let refreshPromise = null;
+
+/**
+ * Checks if a JWT access token is expired or close to expiration (30s buffer).
+ */
+export function isTokenExpired(token) {
+  if (!token || typeof token !== "string") return true;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return true;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonStr =
+      typeof window !== "undefined"
+        ? decodeURIComponent(
+            atob(base64)
+              .split("")
+              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+              .join("")
+          )
+        : Buffer.from(base64, "base64").toString("utf-8");
+    const payload = JSON.parse(jsonStr);
+    if (!payload.exp) return false;
+    // Buffer by 30 seconds
+    return Date.now() >= payload.exp * 1000 - 30000;
+  } catch {
+    return true;
+  }
+}
+
+// Silent token refresh with in-flight deduplication
+export async function silentRefresh() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) return false;
+
+      const res = await fetchWithTimeout(`${BASE_URL}/auth/refresh-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      const parsed = await parseJsonSafely(res);
+      const data = toResponseEnvelope(parsed, res);
+
+      if (data.success && data.data?.accessToken) {
+        setTokens(data.data.accessToken, data.data.refreshToken || refreshToken);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+/**
+ * Retrieves a guaranteed fresh, unexpired access token, refreshing silently if needed.
+ */
+export async function getValidAccessToken() {
+  let token = getAccessToken();
+  if (isTokenExpired(token)) {
+    const refreshed = await silentRefresh();
+    if (refreshed) {
+      token = getAccessToken();
+    }
+  }
+  return token;
+}
+
 // Core request function
 async function request(endpoint, options = {}) {
   const { body, headers: customHeaders, auth = false, ...rest } = options;
@@ -157,7 +233,7 @@ async function request(endpoint, options = {}) {
     ...customHeaders,
   };
 
-  // Attach Bearer token for authenticated requests.
+  // Attach Bearer token for authenticated requests (proactively refreshing if expired).
   if (auth) {
     let token = getAccessToken();
     if (isTokenExpired(token) && getRefreshToken()) {
@@ -226,82 +302,6 @@ async function request(endpoint, options = {}) {
       data: null,
     };
   }
-}
-
-let refreshPromise = null;
-
-// Silent token refresh with in-flight deduplication
-export async function silentRefresh() {
-  if (refreshPromise) return refreshPromise;
-
-  refreshPromise = (async () => {
-    try {
-      const refreshToken = getRefreshToken();
-      if (!refreshToken) return false;
-
-      const res = await fetchWithTimeout(`${BASE_URL}/auth/refresh-token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      const parsed = await parseJsonSafely(res);
-      const data = toResponseEnvelope(parsed, res);
-
-      if (data.success && data.data?.accessToken) {
-        setTokens(data.data.accessToken, refreshToken);
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-
-  return refreshPromise;
-}
-
-/**
- * Checks if a JWT access token is expired or close to expiration (30s buffer).
- */
-export function isTokenExpired(token) {
-  if (!token || typeof token !== "string") return true;
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return true;
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const jsonStr =
-      typeof window !== "undefined"
-        ? decodeURIComponent(
-            atob(base64)
-              .split("")
-              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-              .join("")
-          )
-        : Buffer.from(base64, "base64").toString("utf-8");
-    const payload = JSON.parse(jsonStr);
-    if (!payload.exp) return false;
-    // Buffer by 30 seconds
-    return Date.now() >= payload.exp * 1000 - 30000;
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Retrieves a guaranteed fresh, unexpired access token, refreshing silently if needed.
- */
-export async function getValidAccessToken() {
-  let token = getAccessToken();
-  if (isTokenExpired(token)) {
-    const refreshed = await silentRefresh();
-    if (refreshed) {
-      token = getAccessToken();
-    }
-  }
-  return token;
 }
 
 // Convenience methods

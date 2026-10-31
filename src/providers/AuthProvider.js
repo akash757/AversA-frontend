@@ -37,7 +37,7 @@ const AuthContext = createContext({
   loading: true,
   isLoggedIn: false,
   handleLogout: () => {},
-  login: (userData) => {},
+  login: () => {},
   refreshUser: async () => {},
 });
 
@@ -88,6 +88,19 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  // Proactively refresh access token every 10 minutes while active
+  useEffect(() => {
+    if (!user) return;
+    const intervalId = setInterval(async () => {
+      const refreshToken = getRefreshToken();
+      if (refreshToken) {
+        await silentRefresh();
+      }
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [user]);
 
   const handleLogout = useCallback(() => {
     logout();
