@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/Ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,8 +12,23 @@ import AuthField from "@/components/auth/AuthField";
 import PasswordInput from "@/components/auth/PasswordInput";
 import GoogleButton from "@/components/auth/GoogleButton";
 
-export default function LoginPage() {
+function getSafeRedirectTarget(target, fallback) {
+  if (
+    target &&
+    typeof target === "string" &&
+    target.startsWith("/") &&
+    !target.startsWith("//") &&
+    !target.startsWith("/login") &&
+    !target.startsWith("/signup")
+  ) {
+    return target;
+  }
+  return fallback;
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const { login, isLoggedIn, loading: authLoading, dashboardPath } = useAuth();
   const [email, setEmail] = useState("");
@@ -22,11 +37,15 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [gisLoaded, setGisLoaded] = useState(false);
 
+  const nextParam = searchParams.get("next");
+  const dashboardHome = getDashboardHomeRoute();
+
   useEffect(() => {
     if (!authLoading && isLoggedIn && dashboardPath) {
-      router.replace(dashboardPath);
+      const destination = getSafeRedirectTarget(nextParam, dashboardPath);
+      router.replace(destination);
     }
-  }, [isLoggedIn, authLoading, dashboardPath, router]);
+  }, [isLoggedIn, authLoading, dashboardPath, router, nextParam]);
 
   const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   const GOOGLE_SCOPES = [
@@ -35,8 +54,6 @@ export default function LoginPage() {
     "profile",
     "https://www.googleapis.com/auth/calendar.events",
   ].join(" ");
-
-  const dashboardHome = getDashboardHomeRoute();
 
   useEffect(() => {
     if (document.getElementById("google-gis-script") && window.google?.accounts?.oauth2) {
@@ -74,7 +91,8 @@ export default function LoginPage() {
           if (res.success) {
             toast.success("Welcome to AversA!");
             login(res.data.user);
-            router.push(dashboardHome);
+            const destination = getSafeRedirectTarget(nextParam, dashboardHome);
+            router.push(destination);
           } else {
             toast.error(res.message || "Google authentication failed.");
           }
@@ -87,7 +105,7 @@ export default function LoginPage() {
     });
 
     client.requestCode({ prompt: "consent" });
-  }, [GOOGLE_CLIENT_ID, GOOGLE_SCOPES, dashboardHome, login, router, toast]);
+  }, [GOOGLE_CLIENT_ID, GOOGLE_SCOPES, dashboardHome, login, nextParam, router, toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -99,7 +117,8 @@ export default function LoginPage() {
       if (res.success) {
         toast.success("Welcome back to AversA!");
         login(res.data.user);
-        router.push(dashboardHome);
+        const destination = getSafeRedirectTarget(nextParam, dashboardHome);
+        router.push(destination);
       } else {
         toast.error(res.message || "Invalid email or password.");
       }
@@ -187,5 +206,19 @@ export default function LoginPage() {
         />
       </div>
     </AuthShell>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-white text-sm text-gray-500">
+          Loading…
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }
