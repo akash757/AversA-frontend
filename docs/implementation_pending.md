@@ -259,3 +259,5 @@ Requirement Baselines freeze agreed requirements, decisions, and answered questi
     - Changes since draft creation (accepted items / answered questions after draft createdAt)
     - Checkbox: *"I understand these items remain unresolved and wish to confirm this requirement baseline anyway."* (`acknowledgeWarnings: true`).
   - Upon confirmation: Updates project stage indicator to `Requirements Confirmed` and switches baseline view to immutable confirmed view.
+
+

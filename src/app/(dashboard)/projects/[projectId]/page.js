@@ -31,6 +31,7 @@ import {
   deleteMeeting,
 } from "@/features/meeting/meeting";
 import { getProjectTranscripts } from "@/features/transcript/transcript";
+import { getAccessToken, BASE_URL } from "@/lib/api/api";
 import {
   QuestionMarkCircleIcon,
   CalendarDaysIcon,
@@ -262,6 +263,62 @@ export default function ProjectWorkspacePage() {
     hasLoadedRef.current = projectId;
     void loadData(projectId);
   }, [projectId, loadData]);
+
+  // Real-time updates via Server-Sent Events (SSE)
+  useEffect(() => {
+    if (!projectId) return;
+
+    const token = getAccessToken();
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : "";
+    const sseUrl = `${BASE_URL}/projects/${projectId}/events${tokenQuery}`;
+
+    let eventSource;
+    try {
+      eventSource = new EventSource(sseUrl, { withCredentials: true });
+
+      eventSource.addEventListener("suggestions.running", () => {
+        setSuggestionStatus("running");
+      });
+
+      eventSource.addEventListener("suggestions.ready", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setSuggestionStatus("ready");
+          if (data.briefTooThin !== undefined) {
+            setBriefTooThin(Boolean(data.briefTooThin));
+          }
+          if (Array.isArray(data.topics)) {
+            setTopics(data.topics);
+          }
+          toastRef.current?.success("✨ AI Discovery suggestions are ready!");
+        } catch {
+          void fetchQuestionsOnly(projectId);
+        }
+      });
+
+      eventSource.addEventListener("suggestions.failed", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setSuggestionStatus("failed");
+          toastRef.current?.error(data?.error || "AI suggestion generation failed.");
+        } catch {
+          setSuggestionStatus("failed");
+        }
+      });
+
+      eventSource.onerror = () => {
+        // Native EventSource auto-reconnects on temporary network drops
+      };
+    } catch {
+      // Graceful fallback if EventSource unavailable
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [projectId, fetchQuestionsOnly]);
 
   // Manual Check Status Handler (no auto-polling loops spamming network)
   const handleCheckStatus = async () => {

@@ -20,7 +20,7 @@ function resolveBaseUrl() {
   return process.env.NODE_ENV === "production" ? "/api" : "http://localhost:5000/api";
 }
 
-const BASE_URL = resolveBaseUrl();
+export const BASE_URL = resolveBaseUrl();
 // Access token cookie expiry aligned with 15-minute access token lifetime
 const ACCESS_TOKEN_COOKIE_AGE = 60 * 15;
 const REQUEST_TIMEOUT_MS = 60000; // Increased to 60s for long AI requests
