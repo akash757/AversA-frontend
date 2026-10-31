@@ -27,18 +27,18 @@ export default function Dropdown({
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
+        setSearchQuery("");
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Reset search when opening/closing
+  // Focus search when opening
   useEffect(() => {
-    if (!isOpen) {
-      setSearchQuery("");
-    } else if (searchable && searchInputRef.current) {
-      setTimeout(() => searchInputRef.current?.focus(), 10);
+    if (isOpen && searchable && searchInputRef.current) {
+      const timer = setTimeout(() => searchInputRef.current?.focus(), 10);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, searchable]);
 

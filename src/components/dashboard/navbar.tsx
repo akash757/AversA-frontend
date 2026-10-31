@@ -19,7 +19,7 @@ export default function DashboardNavbar() {
   const params = useParams();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [isMac, setIsMac] = useState(false);
+  const isMac = typeof window !== "undefined" && typeof navigator !== "undefined" && (navigator.platform?.toUpperCase().indexOf("MAC") ?? -1) >= 0;
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -35,8 +35,6 @@ export default function DashboardNavbar() {
   const isInsideProject = Boolean(projectId);
 
   useEffect(() => {
-    setIsMac(typeof navigator !== "undefined" && navigator.platform?.toUpperCase().indexOf("MAC") >= 0);
-
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false);

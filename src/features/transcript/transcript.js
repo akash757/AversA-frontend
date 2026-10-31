@@ -21,3 +21,22 @@ export async function deleteTranscript(transcriptId) {
   return api.delete(`/transcripts/${transcriptId}`, { auth: true });
 }
 
+export async function getTranscriptSpeakers(transcriptId) {
+  return api.get(`/transcripts/${transcriptId}/speakers`, { auth: true });
+}
+
+export async function mapTranscriptSpeakers(transcriptId, mappings) {
+  return api.post(`/transcripts/${transcriptId}/speakers/map`, { mappings }, { auth: true });
+}
+
+export async function triggerTranscriptAnalysis(transcriptId) {
+  return api.post(`/transcripts/${transcriptId}/analysis`, {}, { auth: true });
+}
+
+export async function getTranscriptAnalysisStatus(transcriptId) {
+  return api.get(`/transcripts/${transcriptId}/analysis/status`, { auth: true });
+}
+
+export async function getProjectParticipants(projectId) {
+  return api.get(`/projects/${projectId}/participants`, { auth: true });
+}

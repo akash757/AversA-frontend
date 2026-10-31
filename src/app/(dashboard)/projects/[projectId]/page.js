@@ -9,6 +9,9 @@ import ProjectHeader from "@/components/project/ProjectHeader";
 import MeetingCard from "@/components/meetings/MeetingCard";
 import GoogleCalendarConnect from "@/components/meetings/GoogleCalendarConnect";
 import DeepDiscoveryTranscripts from "@/components/project/DeepDiscoveryTranscripts";
+import ExtractedItemsBoard from "@/components/project/ExtractedItemsBoard";
+import BaselineManager from "@/components/project/BaselineManager";
+import DiscussionSheetModal from "@/components/project/DiscussionSheetModal";
 import {
   getProjectById,
   getProjectQuestions,
@@ -30,7 +33,7 @@ import {
   updateMeeting,
   deleteMeeting,
 } from "@/features/meeting/meeting";
-import { getProjectTranscripts } from "@/features/transcript/transcript";
+import { getProjectTranscripts, getProjectParticipants } from "@/features/transcript/transcript";
 import { getValidAccessToken, silentRefresh, getAccessToken, BASE_URL } from "@/lib/api/api";
 import {
   QuestionMarkCircleIcon,
@@ -56,6 +59,8 @@ import {
   InformationCircleIcon,
   FunnelIcon,
   DocumentTextIcon,
+  DocumentCheckIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 
 export default function ProjectWorkspacePage() {
@@ -75,7 +80,9 @@ export default function ProjectWorkspacePage() {
   const [isLoadingTranscripts, setIsLoadingTranscripts] = useState(false);
   const [showDayOneQuestions, setShowDayOneQuestions] = useState(false);
   const [togglingMeetingId, setTogglingMeetingId] = useState(null);
-  const [activeTab, setActiveTab] = useState("questions"); // "questions" | "meetings" | "contacts"
+  const [activeTab, setActiveTab] = useState("questions"); // "questions" | "meetings" | "contacts" | "items" | "baselines"
+  const [participants, setParticipants] = useState([]);
+  const [isDiscussionSheetOpen, setIsDiscussionSheetOpen] = useState(false);
 
   // Question Filters & Search
   const [questionStatusFilter, setQuestionStatusFilter] = useState("all");
@@ -165,12 +172,13 @@ export default function ProjectWorkspacePage() {
   const loadData = useCallback(async (id) => {
     setIsLoading(true);
     try {
-      const [projRes, questRes, meetRes, contactRes, transRes] = await Promise.all([
+      const [projRes, questRes, meetRes, contactRes, transRes, partRes] = await Promise.all([
         getProjectById(id),
         getProjectQuestions(id),
         getMeetingsByProject(id),
         getProjectContacts(id),
         getProjectTranscripts(id).catch(() => null),
+        getProjectParticipants(id).catch(() => null),
       ]);
 
       if (projRes?.success) {
@@ -209,6 +217,10 @@ export default function ProjectWorkspacePage() {
 
       if (transRes?.success) {
         setTranscripts(transRes.data?.transcripts || []);
+      }
+
+      if (partRes?.success) {
+        setParticipants(partRes.data?.participants || []);
       }
     } catch {
       toastRef.current?.error("Failed to load workspace data.");
@@ -1002,6 +1014,32 @@ export default function ProjectWorkspacePage() {
                   {contacts.length}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("items")}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                  activeTab === "items"
+                    ? "bg-blue-50 text-[#2563EB] border border-blue-200/80 shadow-xs"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/60"
+                }`}
+              >
+                <DocumentCheckIcon className="h-4 w-4" />
+                <span>Discovered Items</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("baselines")}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                  activeTab === "baselines"
+                    ? "bg-blue-50 text-[#2563EB] border border-blue-200/80 shadow-xs"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/60"
+                }`}
+              >
+                <ShieldCheckIcon className="h-4 w-4" />
+                <span>Baselines</span>
+              </button>
             </div>
 
             {/* Global Tab Actions */}
@@ -1031,6 +1069,16 @@ export default function ProjectWorkspacePage() {
 
                   {(!isDeepDiscovery || showDayOneQuestions) && (
                     <>
+                      <button
+                        type="button"
+                        onClick={() => setIsDiscussionSheetOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-[#2563EB] hover:bg-blue-100 shadow-xs transition"
+                        title="Open client discovery discussion sheet"
+                      >
+                        <ChatBubbleLeftRightIcon className="h-4 w-4" />
+                        <span>Discussion Sheet</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={handleCopyAgenda}
@@ -1100,6 +1148,7 @@ export default function ProjectWorkspacePage() {
             transcripts={transcripts}
             onRefreshTranscripts={() => fetchTranscriptsOnly(projectId)}
             onSwitchToQuestions={() => setShowDayOneQuestions(true)}
+            onViewItems={() => setActiveTab("items")}
             toast={toastRef.current}
           />
         ) : (
@@ -1501,14 +1550,70 @@ export default function ProjectWorkspacePage() {
                     </div>
 
                     {/* Questions in this topic */}
-                    {!isCollapsed && (
+                    {!isCollapsed && (() => {
+                      const orphanFollowUps = qList.filter((q) => q.source === "follow_up" && !q.parentQuestionId);
+                      const parentQuestions = qList.filter((q) => !q.parentQuestionId && q.source !== "follow_up");
+
+                      return (
                       <div className="p-5 space-y-3">
-                        {qList.length === 0 ? (
+                        {/* New Discovery Gaps Callout Banner */}
+                        {orphanFollowUps.length > 0 && (
+                          <div className="mb-4 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50/90 to-indigo-50/70 p-3.5 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <SparklesIcon className="h-4 w-4 text-purple-600" />
+                                <h5 className="text-xs font-bold text-purple-950 uppercase tracking-wider">
+                                  New Discovery Gaps Identified from Calls ({orphanFollowUps.length})
+                                </h5>
+                              </div>
+                              <span className="text-[10px] text-purple-700 font-medium hidden sm:inline">
+                                Uncovered requirements or business logic gaps
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              {orphanFollowUps.map((fu) => (
+                                <div key={fu.id || fu._id} className="rounded-lg border border-purple-200/80 bg-white p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs">
+                                  <div className="space-y-0.5 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="rounded bg-purple-100 px-1.5 py-0.2 text-[9px] font-bold text-purple-800">
+                                        Discovery Gap
+                                      </span>
+                                      <span className="text-xs font-semibold text-gray-900">{fu.text}</span>
+                                    </div>
+                                    {fu.reason && <p className="text-[11px] text-gray-500 italic pl-1">Why: {fu.reason}</p>}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                                    {fu.status === "suggested" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateStatus(fu.id, "pending")}
+                                        className="rounded-lg bg-purple-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-purple-700 shadow-2xs"
+                                      >
+                                        Approve Question
+                                      </button>
+                                    )}
+                                    {fu.status !== "skipped" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateStatus(fu.id, "skipped")}
+                                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 shadow-2xs"
+                                      >
+                                        Dismiss
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {parentQuestions.length === 0 && orphanFollowUps.length === 0 ? (
                           <p className="text-xs text-gray-400 italic py-2">
                             No questions match current filter in this section.
                           </p>
                         ) : (
-                          qList.map((question) => {
+                          parentQuestions.map((question) => {
                             const isAnswered = question.status === "answered";
                             const isAsked = question.status === "asked";
                             const isSkipped = question.status === "skipped";
@@ -1849,12 +1954,66 @@ export default function ProjectWorkspacePage() {
                                     </div>
                                   </div>
                                 )}
+
+                                {/* Clarifying Follow-Up Questions (Indented Thread) */}
+                                {qList.filter((c) => c.parentQuestionId === question.id).map((child) => (
+                                  <div
+                                    key={child.id || child._id}
+                                    className="mt-2.5 ml-4 sm:ml-7 border-l-2 border-purple-300 pl-3.5 py-1 space-y-1.5 animate-in fade-in"
+                                  >
+                                    <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3 shadow-2xs flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                                      <div className="space-y-1 min-w-0">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <span className="rounded-md bg-purple-100 border border-purple-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-800 flex items-center gap-1">
+                                            <SparklesIcon className="h-2.5 w-2.5" />
+                                            Clarifying Follow-Up
+                                          </span>
+                                          <span className="rounded-md px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600">
+                                            {child.status}
+                                          </span>
+                                        </div>
+                                        <p className="text-xs font-semibold text-gray-900 leading-snug">
+                                          {child.text}
+                                        </p>
+                                        {child.reason && (
+                                          <p className="text-[11px] text-purple-900 italic">
+                                            Rationale: {child.reason}
+                                          </p>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                                        {child.status === "suggested" && (
+                                          <button
+                                            type="button"
+                                            disabled={savingQuestionId === child.id}
+                                            onClick={() => handleUpdateStatus(child.id, "pending")}
+                                            className="rounded-lg bg-purple-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-purple-700 shadow-2xs"
+                                          >
+                                            Approve Question
+                                          </button>
+                                        )}
+                                        {child.status !== "skipped" && (
+                                          <button
+                                            type="button"
+                                            disabled={savingQuestionId === child.id}
+                                            onClick={() => handleUpdateStatus(child.id, "skipped")}
+                                            className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50"
+                                          >
+                                            Dismiss
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             );
                           })
                         )}
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -1900,6 +2059,32 @@ export default function ProjectWorkspacePage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 4: DISCOVERED ITEMS REVIEW BOARD */}
+      {/* ============================================================== */}
+      {activeTab === "items" && (
+        <ExtractedItemsBoard
+          projectId={projectId}
+          transcripts={transcripts}
+          participants={participants}
+          toast={toastRef.current}
+          onRefreshProject={() => loadData(projectId)}
+        />
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 5: REQUIREMENT BASELINES */}
+      {/* ============================================================== */}
+      {activeTab === "baselines" && (
+        <BaselineManager
+          projectId={projectId}
+          userRole={project?.currentUserRole || "product_manager"}
+          topics={topics}
+          toast={toastRef.current}
+          onRefreshProject={() => loadData(projectId)}
+        />
       )}
 
       {/* ============================================================== */}
@@ -2451,6 +2636,14 @@ export default function ProjectWorkspacePage() {
           </div>
         </div>
       )}
+      {/* Discussion Sheet Modal */}
+      <DiscussionSheetModal
+        isOpen={isDiscussionSheetOpen}
+        onClose={() => setIsDiscussionSheetOpen(false)}
+        project={project}
+        topics={topics}
+        toast={toastRef.current}
+      />
     </div>
   );
 }

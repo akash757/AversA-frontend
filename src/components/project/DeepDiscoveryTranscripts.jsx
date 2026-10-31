@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   DocumentTextIcon,
   SparklesIcon,
@@ -17,16 +17,19 @@ import {
   CalendarDaysIcon,
   UserGroupIcon,
   ArrowPathIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
   InformationCircleIcon,
+  UserPlusIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import {
   previewTranscript,
   uploadTranscript,
   getTranscriptById,
   deleteTranscript,
+  triggerTranscriptAnalysis,
+  getTranscriptAnalysisStatus,
 } from "@/features/transcript/transcript";
+import SpeakerMappingModal from "./SpeakerMappingModal";
 
 const FORMAT_OPTIONS = [
   { value: "", label: "Auto-Detect Format (Recommended)" },
@@ -52,6 +55,7 @@ export default function DeepDiscoveryTranscripts({
   transcripts = [],
   onRefreshTranscripts,
   onSwitchToQuestions,
+  onViewItems,
   toast,
 }) {
   // Form State
@@ -71,6 +75,10 @@ export default function DeepDiscoveryTranscripts({
   // Submission & Mutation States
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+
+  // Speaker Mapping & AI Analysis States
+  const [mappingTranscript, setMappingTranscript] = useState(null);
+  const [analyzingIds, setAnalyzingIds] = useState({});
 
   // Search Filter for Indexed Transcripts
   const [searchQuery, setSearchQuery] = useState("");
@@ -114,6 +122,59 @@ export default function DeepDiscoveryTranscripts({
     toast?.info("Sample meeting transcript loaded into text area.");
   };
 
+  // Trigger Background AI Extraction Analysis (Defined once)
+  const handleTriggerAnalysis = async (transcriptId) => {
+    if (analyzingIds[transcriptId]) return;
+    setAnalyzingIds((prev) => ({ ...prev, [transcriptId]: true }));
+
+    try {
+      const res = await triggerTranscriptAnalysis(transcriptId);
+      if (res?.success) {
+        toast?.success("AI extraction pipeline started in background!");
+        if (onRefreshTranscripts) {
+          await onRefreshTranscripts();
+        }
+      } else {
+        toast?.error(res?.message || "Failed to trigger AI analysis.");
+      }
+    } catch (err) {
+      toast?.error(err?.message || "Error starting transcript analysis.");
+    } finally {
+      setAnalyzingIds((prev) => ({ ...prev, [transcriptId]: false }));
+    }
+  };
+
+  // Poll for background analysis completion
+  useEffect(() => {
+    const running = (transcripts || []).filter((t) => t.analysisStatus === "running");
+    if (running.length === 0) return;
+
+    const intervalId = setInterval(async () => {
+      let shouldRefresh = false;
+      for (const t of running) {
+        const trnId = t.id || t._id;
+        try {
+          const statusRes = await getTranscriptAnalysisStatus(trnId);
+          if (statusRes?.success && statusRes.data?.status !== "running") {
+            shouldRefresh = true;
+            if (statusRes.data.status === "ready") {
+              toast?.success(`✨ AI Analysis Complete for "${t.title}"! Items and follow-ups extracted.`);
+            } else if (statusRes.data.status === "failed") {
+              toast?.error(`AI Analysis failed for "${t.title}": ${statusRes.data.error || "Execution error"}`);
+            }
+          }
+        } catch {
+          // Silent polling retry
+        }
+      }
+      if (shouldRefresh && onRefreshTranscripts) {
+        onRefreshTranscripts();
+      }
+    }, 4000);
+
+    return () => clearInterval(intervalId);
+  }, [transcripts, onRefreshTranscripts, toast]);
+
   // Preview Parser Handler
   const handlePreview = async () => {
     if (!form.text.trim()) {
@@ -126,29 +187,30 @@ export default function DeepDiscoveryTranscripts({
         text: form.text.trim(),
         format: form.format || undefined,
       };
+
       const res = await previewTranscript(projectId, payload);
-      if (res?.success) {
+      if (res?.success && res.data) {
         setPreviewData(res.data);
-        toast?.success("Transcript preview generated successfully!");
+        toast?.success("Transcript preview generated successfully.");
       } else {
-        toast?.error(res?.message || "Failed to preview transcript.");
+        toast?.error(res?.message || "Failed to parse transcript preview.");
       }
     } catch (err) {
-      toast?.error(err?.message || "Error parsing transcript preview.");
+      toast?.error(err?.message || "Network error generating preview.");
     } finally {
       setIsPreviewing(false);
     }
   };
 
-  // Submit and Index Transcript Handler
+  // Submit and Index Transcript
   const handleSubmit = async (e) => {
-    e?.preventDefault();
+    e.preventDefault();
     if (!form.title.trim()) {
-      toast?.error("Please enter a title for the transcript.");
+      toast?.error("Transcript title is required.");
       return;
     }
     if (!form.text.trim()) {
-      toast?.error("Please paste transcript text before submitting.");
+      toast?.error("Transcript dialogue text is required.");
       return;
     }
 
@@ -157,16 +219,14 @@ export default function DeepDiscoveryTranscripts({
       const payload = {
         title: form.title.trim(),
         text: form.text.trim(),
+        meetingDate: form.meetingDate,
         meetingId: form.meetingId || undefined,
-        meetingDate: form.meetingDate
-          ? new Date(form.meetingDate).toISOString()
-          : new Date().toISOString(),
         format: form.format || undefined,
       };
 
       const res = await uploadTranscript(projectId, payload);
       if (res?.success) {
-        toast?.success(`Transcript saved! Parsed ${res.data?.utteranceCount ?? 0} dialogue turns.`);
+        toast?.success("Transcript uploaded and indexed successfully!");
         setForm({
           title: "",
           meetingId: "",
@@ -178,8 +238,13 @@ export default function DeepDiscoveryTranscripts({
         if (onRefreshTranscripts) {
           await onRefreshTranscripts();
         }
+
+        // If unmapped speakers detected, open speaker mapping modal
+        if (res.data?.transcript?.status === "needs_speaker_mapping") {
+          setMappingTranscript(res.data.transcript);
+        }
       } else {
-        toast?.error(res?.message || "Failed to upload transcript.");
+        toast?.error(res?.message || "Failed to index transcript.");
       }
     } catch (err) {
       toast?.error(err?.message || "Error submitting transcript.");
@@ -188,11 +253,12 @@ export default function DeepDiscoveryTranscripts({
     }
   };
 
-  // Delete Transcript Handler
+  // Delete Transcript
   const handleDelete = async (transcriptId) => {
-    if (!confirm("Are you sure you want to delete this transcript and its indexed utterances?")) {
+    if (!confirm("Are you sure you want to delete this transcript and all parsed dialogue turns?")) {
       return;
     }
+
     setDeletingId(transcriptId);
     try {
       const res = await deleteTranscript(transcriptId);
@@ -202,7 +268,7 @@ export default function DeepDiscoveryTranscripts({
           await onRefreshTranscripts();
         }
       } else {
-        toast?.error(res?.message || "Could not delete transcript.");
+        toast?.error(res?.message || "Failed to delete transcript.");
       }
     } catch (err) {
       toast?.error(err?.message || "Error deleting transcript.");
@@ -211,177 +277,154 @@ export default function DeepDiscoveryTranscripts({
     }
   };
 
-  // Open Utterance Detail Modal
-  const handleOpenDetail = async (transcriptId) => {
+  // View Utterances Detail
+  const handleViewUtterances = async (t) => {
+    setSelectedTranscript(t);
     setIsLoadingDetail(true);
-    setSelectedTranscript({ id: transcriptId, isLoading: true });
+    setUtteranceSearch("");
     try {
-      const res = await getTranscriptById(transcriptId, true);
-      if (res?.success) {
-        setSelectedTranscript(res.data);
-      } else {
-        toast?.error(res?.message || "Could not load transcript details.");
-        setSelectedTranscript(null);
+      const trnId = t.id || t._id;
+      const res = await getTranscriptById(trnId, true);
+      if (res?.success && res.data?.transcript) {
+        setSelectedTranscript(res.data.transcript);
       }
-    } catch (err) {
-      toast?.error(err?.message || "Error fetching transcript.");
-      setSelectedTranscript(null);
+    } catch {
+      // Keep summary view if full fetch fails
     } finally {
       setIsLoadingDetail(false);
     }
   };
 
-  // Filtered Transcripts List
-  const filteredTranscripts = useMemo(() => {
-    if (!searchQuery.trim()) return transcripts;
-    const q = searchQuery.toLowerCase();
-    return transcripts.filter((t) => {
-      const titleMatch = t.title?.toLowerCase().includes(q);
-      const formatMatch = t.sourceFormat?.toLowerCase().includes(q);
-      const speakerMatch = Array.isArray(t.detectedSpeakers)
-        ? t.detectedSpeakers.some((s) => s.toLowerCase().includes(q))
-        : false;
-      const meetingMatch = t.meeting?.title?.toLowerCase().includes(q);
-      return titleMatch || formatMatch || speakerMatch || meetingMatch;
-    });
-  }, [transcripts, searchQuery]);
-
-  // Filtered Utterances inside modal
-  const filteredUtterances = useMemo(() => {
-    if (!selectedTranscript?.utterances) return [];
-    if (!utteranceSearch.trim()) return selectedTranscript.utterances;
-    const q = utteranceSearch.toLowerCase();
-    return selectedTranscript.utterances.filter(
-      (u) =>
-        u.text?.toLowerCase().includes(q) ||
-        u.speakerLabel?.toLowerCase().includes(q)
-    );
-  }, [selectedTranscript, utteranceSearch]);
-
-  // Copy Utterances to Clipboard
-  const handleCopyTranscriptDialogue = () => {
-    if (!selectedTranscript?.utterances?.length) return;
-    const textLines = selectedTranscript.utterances.map((u) => {
-      const speaker = u.speakerLabel ? `${u.speakerLabel}: ` : "";
-      return `${speaker}${u.text}`;
-    });
-    navigator.clipboard.writeText(textLines.join("\n"));
+  // Copy Utterances
+  const handleCopyUtterances = () => {
+    if (!selectedTranscript?.utterances) return;
+    const text = selectedTranscript.utterances
+      .map((u) => `[${u.speakerLabel || "Unknown"}]: ${u.text}`)
+      .join("\n\n");
+    navigator.clipboard.writeText(text);
     setCopiedUtterances(true);
-    toast?.success("Transcript dialogue copied to clipboard!");
+    toast?.success("Dialogue copied to clipboard.");
     setTimeout(() => setCopiedUtterances(false), 2000);
   };
 
-  // Format milliseconds to mm:ss
+  // Filtered Transcripts
+  const filteredTranscripts = useMemo(() => {
+    if (!searchQuery.trim()) return transcripts;
+    const query = searchQuery.toLowerCase();
+    return transcripts.filter((t) => {
+      const titleMatch = t.title?.toLowerCase().includes(query);
+      const meetingMatch = t.meeting?.title?.toLowerCase().includes(query);
+      const formatMatch = t.sourceFormat?.toLowerCase().includes(query);
+      return titleMatch || meetingMatch || formatMatch;
+    });
+  }, [transcripts, searchQuery]);
+
+  // Filtered Utterances in Detail Modal
+  const filteredUtterances = useMemo(() => {
+    const list = selectedTranscript?.utterances || [];
+    if (!utteranceSearch.trim()) return list;
+    const q = utteranceSearch.toLowerCase();
+    return list.filter(
+      (u) => u.text?.toLowerCase().includes(q) || u.speakerLabel?.toLowerCase().includes(q)
+    );
+  }, [selectedTranscript, utteranceSearch]);
+
+  const lineCount = form.text ? form.text.split("\n").length : 0;
+  const charCount = form.text ? form.text.length : 0;
+
   const formatTime = (ms) => {
-    if (ms === null || ms === undefined || ms < 0) return null;
+    if (ms === null || ms === undefined) return "";
     const totalSec = Math.floor(ms / 1000);
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  // Confidence pill helper
   const renderConfidenceBadge = (confidence) => {
-    const num = typeof confidence === "number" ? Math.round(confidence * 100) : 100;
-    let colorClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
-    if (num < 50) {
-      colorClass = "bg-rose-50 text-rose-700 border-rose-200";
-    } else if (num < 80) {
-      colorClass = "bg-amber-50 text-amber-700 border-amber-200";
+    switch (confidence) {
+      case "high":
+        return (
+          <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+            High Confidence
+          </span>
+        );
+      case "medium":
+        return (
+          <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+            Medium Confidence
+          </span>
+        );
+      case "low":
+        return (
+          <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
+            Low Confidence
+          </span>
+        );
+      default:
+        return null;
     }
-    return (
-      <span
-        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${colorClass}`}
-      >
-        <SparklesIcon className="h-3 w-3" />
-        {num}% Parse Confidence
-      </span>
-    );
   };
-
-  const lineCount = form.text ? form.text.split("\n").length : 0;
-  const charCount = form.text.length;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-200">
-      {/* 1. Deep Discovery Header Banner */}
-      <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-white p-5 sm:p-6 shadow-xs">
+    <div className="space-y-6">
+      {/* 1. Header Banner */}
+      <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-white p-5 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#2563EB] text-white shadow-sm">
-              <DocumentTextIcon className="h-6 w-6" />
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="rounded-md border border-blue-300 bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#2563EB]">
+                Stage: Deep Discovery Active
+              </span>
+              <span className="text-xs text-gray-500 font-medium">
+                {transcripts.length} Indexed Call{transcripts.length !== 1 ? "s" : ""}
+              </span>
             </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
-                  Deep Discovery Active
-                </span>
-                <span className="text-xs font-semibold text-gray-500">
-                  Stage 2 of 3
-                </span>
-              </div>
-              <h2 className="text-lg font-black text-gray-900 tracking-tight mt-1">
-                Meeting Transcription & Dialogue Parser
-              </h2>
-              <p className="mt-1 text-xs text-gray-600 max-w-2xl leading-relaxed">
-                Paste meeting transcripts from Zoom, Google Meet, or Microsoft Teams. The engine will segment utterances, extract participants, and index dialogue for automated requirements synthesis.
-              </p>
-            </div>
+            <h2 className="text-base font-bold text-gray-900 tracking-tight">
+              Call Transcript Processing & Dialogue Synthesis
+            </h2>
+            <p className="text-xs text-gray-600 max-w-2xl leading-relaxed">
+              Upload meeting recordings, Teams chat dumps, or subtitle exports. AversA normalizes dialogue turns, maps speaker aliases to client stakeholders, and runs LLM extraction to automatically answer discovery items.
+            </p>
           </div>
 
-          {onSwitchToQuestions && (
-            <button
-              type="button"
-              onClick={onSwitchToQuestions}
-              className="inline-flex items-center gap-2 self-start md:self-auto rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 shadow-2xs hover:bg-gray-50 hover:border-gray-400 transition active:scale-95 shrink-0"
-            >
-              <InformationCircleIcon className="h-4 w-4 text-[#2563EB]" />
-              <span>Inspect Day 1 Questionnaire</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onSwitchToQuestions}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 transition shadow-2xs self-start md:self-auto shrink-0"
+            title="Inspect Day 1 Baseline Questions"
+          >
+            <InformationCircleIcon className="h-4 w-4" />
+            <span>View Day 1 Questionnaire</span>
+          </button>
         </div>
       </div>
 
-      {/* 2. Paste Transcript Form Card */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-xs space-y-5">
+      {/* 2. Ingestion & Preview Section */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-wider text-gray-900 flex items-center gap-2">
               <ArrowUpTrayIcon className="h-4 w-4 text-[#2563EB]" />
-              <span>1. Paste Raw Meeting Transcription</span>
+              <span>1. Upload Call Transcript</span>
             </h3>
             <p className="mt-0.5 text-xs text-gray-500">
-              Supports WebVTT (.vtt), SubRip (.srt), MS Teams transcript copy-paste, or speaker labeled dialogues.
+              Paste raw transcript dialogue from Teams, Zoom, Google Meet, or WebVTT / SRT files.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleLoadSample}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-[#2563EB] hover:bg-blue-100 transition shadow-2xs"
-            >
-              <SparklesIcon className="h-3.5 w-3.5" />
-              <span>Load Sample Transcript</span>
-            </button>
-            {form.text && (
-              <button
-                type="button"
-                onClick={() => {
-                  setForm((prev) => ({ ...prev, text: "" }));
-                  setPreviewData(null);
-                }}
-                className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition"
-              >
-                Clear
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={handleLoadSample}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-800 hover:bg-purple-100 transition shadow-2xs self-start sm:self-auto"
+          >
+            <SparklesIcon className="h-3.5 w-3.5 text-purple-600" />
+            <span>Load Sample Architecture Dialogue</span>
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Metadata Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Metadata Controls */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Title */}
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
@@ -467,7 +510,7 @@ export default function DeepDiscoveryTranscripts({
               </span>
             </label>
             <textarea
-              rows={13}
+              rows={11}
               value={form.text}
               onChange={(e) => setForm((prev) => ({ ...prev, text: e.target.value }))}
               placeholder={`Paste raw transcript text here...
@@ -486,95 +529,85 @@ Example formats supported:
             />
           </div>
 
-          {/* Action Row */}
+          {/* Actions Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-            <p className="text-[11px] text-gray-500">
-              💡 Tip: Click <span className="font-semibold text-gray-700">Preview Parser</span> to verify speaker detection and confidence before saving.
-            </p>
+            <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
+              <InformationCircleIcon className="h-4 w-4 text-blue-500 shrink-0" />
+              <span>Filler words (uh, um, you know) are scrubbed automatically without altering meaning.</span>
+            </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 self-end sm:self-auto">
               <button
                 type="button"
                 disabled={isPreviewing || !form.text.trim()}
                 onClick={handlePreview}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-2.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-2xs active:scale-95"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition shadow-2xs"
               >
-                {isPreviewing ? (
-                  <ArrowPathIcon className="h-4 w-4 animate-spin text-indigo-600" />
-                ) : (
-                  <SparklesIcon className="h-4 w-4 text-indigo-600" />
-                )}
-                <span>{isPreviewing ? "Analyzing…" : "Preview Parser"}</span>
+                <EyeIcon className="h-4 w-4 text-gray-500" />
+                <span>{isPreviewing ? "Analyzing Structure…" : "Preview Parsed Turns"}</span>
               </button>
 
               <button
                 type="submit"
-                disabled={isSubmitting || !form.text.trim() || !form.title.trim()}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#1d4ed8] disabled:opacity-50 disabled:cursor-not-allowed transition active:scale-95"
+                disabled={isSubmitting || !form.text.trim()}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#2563EB] px-5 py-2 text-xs font-bold text-white hover:bg-[#1d4ed8] disabled:opacity-50 transition shadow-xs"
               >
-                {isSubmitting ? (
-                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircleIcon className="h-4 w-4" />
-                )}
-                <span>{isSubmitting ? "Indexing Transcript…" : "Submit & Index Transcript"}</span>
+                <ArrowUpTrayIcon className="h-4 w-4" />
+                <span>{isSubmitting ? "Indexing Dialogue…" : "Submit & Index Transcript"}</span>
               </button>
             </div>
           </div>
         </form>
 
-        {/* Live Parser Preview Box */}
+        {/* Real-Time Preview Results Drawer */}
         {previewData && (
-          <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5 space-y-4 animate-in fade-in duration-150">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 pb-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-black uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
-                  <SparklesIcon className="h-4 w-4 text-indigo-600" />
-                  Parser Preview
+          <div className="rounded-2xl border border-blue-200 bg-blue-50/30 p-5 space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#2563EB]">
+                  Parser Diagnostics & Quality Assessment
                 </span>
-                <span className="rounded-md bg-white border border-indigo-200 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-800">
-                  Format: {previewData.sourceFormat}
-                </span>
-                {renderConfidenceBadge(previewData.parseConfidence)}
-                <span className="rounded-md bg-white border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-800">
-                  {previewData.utteranceCount} Utterances
-                </span>
-                {previewData.durationMs > 0 && (
-                  <span className="rounded-md bg-white border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-800 flex items-center gap-1">
-                    <ClockIcon className="h-3 w-3" />
-                    {formatTime(previewData.durationMs)}
-                  </span>
-                )}
+                <h4 className="text-sm font-bold text-gray-900 mt-1">
+                  Format Detected: <span className="uppercase text-[#2563EB]">{previewData.detectedFormat}</span>
+                </h4>
               </div>
-
               <button
                 type="button"
                 onClick={() => setPreviewData(null)}
-                className="text-indigo-600 hover:text-indigo-900 text-xs font-semibold self-start sm:self-auto"
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
               >
-                Dismiss Preview
+                <XMarkIcon className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Detected Speakers Chips */}
-            {Array.isArray(previewData.detectedSpeakers) && previewData.detectedSpeakers.length > 0 && (
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-1.5">
-                  Detected Speakers ({previewData.detectedSpeakers.length}):
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {previewData.detectedSpeakers.map((spk, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-indigo-900 shadow-2xs"
-                    >
-                      <UserGroupIcon className="h-3 w-3 text-indigo-500" />
-                      {spk}
-                    </span>
-                  ))}
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="rounded-xl bg-white border border-blue-100 p-2.5 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Total Turns</span>
+                <p className="text-base font-black text-gray-900">{previewData.utteranceCount}</p>
+              </div>
+
+              <div className="rounded-xl bg-white border border-blue-100 p-2.5 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Unique Speakers</span>
+                <p className="text-base font-black text-[#2563EB]">
+                  {Array.isArray(previewData.detectedSpeakers) ? previewData.detectedSpeakers.length : 0}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-white border border-blue-100 p-2.5 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Confidence</span>
+                <div className="mt-0.5 flex justify-center">
+                  {renderConfidenceBadge(previewData.confidence)}
                 </div>
               </div>
-            )}
+
+              <div className="rounded-xl bg-white border border-blue-100 p-2.5 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Estimated Duration</span>
+                <p className="text-base font-black text-gray-900">
+                  {previewData.durationMs ? formatTime(previewData.durationMs) : "Unknown"}
+                </p>
+              </div>
+            </div>
 
             {/* Warnings if any */}
             {Array.isArray(previewData.warnings) && previewData.warnings.length > 0 && (
@@ -714,6 +747,21 @@ Example formats supported:
                         <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-[#2563EB]">
                           {t.utteranceCount ?? 0} Utterances
                         </span>
+                        {t.status === "needs_speaker_mapping" ? (
+                          <button
+                            type="button"
+                            onClick={() => setMappingTranscript(t)}
+                            className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 hover:bg-amber-100 transition shadow-2xs cursor-pointer"
+                          >
+                            <UserPlusIcon className="h-3 w-3 text-amber-600" />
+                            <span>Needs Speaker Mapping</span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                            <ShieldCheckIcon className="h-3 w-3 text-emerald-600" />
+                            <span>Speakers Mapped</span>
+                          </span>
+                        )}
                         {t.durationMs > 0 && (
                           <span className="text-[11px] text-gray-400 flex items-center gap-1">
                             <ClockIcon className="h-3 w-3" />
@@ -740,44 +788,90 @@ Example formats supported:
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 self-start md:self-auto shrink-0">
+                      {/* AI Analysis Button & Status */}
+                      {t.analysisStatus === "running" ? (
+                        <div className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50/90 px-3 py-1.5 text-xs font-semibold text-purple-700 animate-pulse shadow-2xs">
+                          <SparklesIcon className="h-3.5 w-3.5 animate-spin text-purple-600" />
+                          <span>AI Analyzing Dialogue…</span>
+                        </div>
+                      ) : t.analysisStatus === "ready" ? (
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700">
+                            <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>{t.itemCount ?? 0} Items</span>
+                            {t.followUpCount > 0 && <span className="text-emerald-600">• {t.followUpCount} Follow-ups</span>}
+                          </span>
+                          {onViewItems && (
+                            <button
+                              type="button"
+                              onClick={() => onViewItems(trnId)}
+                              className="inline-flex items-center gap-1 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 text-xs font-semibold shadow-2xs transition cursor-pointer"
+                            >
+                              <span>View Discovered Items &rarr;</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={analyzingIds[trnId]}
+                            onClick={() => handleTriggerAnalysis(trnId)}
+                            className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-200 shadow-2xs transition"
+                            title="Re-run AI extraction pipeline"
+                          >
+                            <ArrowPathIcon className="h-3 w-3 text-gray-400" />
+                            <span>Re-run</span>
+                          </button>
+                        </div>
+                      ) : t.analysisStatus === "failed" ? (
+                        <button
+                          type="button"
+                          disabled={analyzingIds[trnId]}
+                          onClick={() => handleTriggerAnalysis(trnId)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 shadow-2xs transition"
+                        >
+                          <ArrowPathIcon className="h-3.5 w-3.5" />
+                          <span>Retry AI Analysis</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={analyzingIds[trnId] || t.status === "needs_speaker_mapping"}
+                          onClick={() => handleTriggerAnalysis(trnId)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-600 to-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 shadow-xs transition active:scale-95 cursor-pointer"
+                          title={
+                            t.status === "needs_speaker_mapping"
+                              ? "Map speakers before triggering AI analysis"
+                              : "Synthesize transcript with AI"
+                          }
+                        >
+                          <SparklesIcon className="h-3.5 w-3.5" />
+                          <span>Analyze Transcript</span>
+                        </button>
+                      )}
+
+                      {/* View Utterances Button */}
                       <button
                         type="button"
-                        onClick={() => handleOpenDetail(trnId)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 shadow-2xs transition active:scale-95"
+                        onClick={() => handleViewUtterances(t)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-2xs transition"
+                        title="View parsed turn-by-turn dialogue"
                       >
-                        <EyeIcon className="h-4 w-4 text-[#2563EB]" />
-                        <span>View Utterances</span>
+                        <EyeIcon className="h-3.5 w-3.5 text-gray-500" />
+                        <span>Inspect Turns</span>
                       </button>
 
+                      {/* Delete Transcript Button */}
                       <button
                         type="button"
                         disabled={deletingId === trnId}
                         onClick={() => handleDelete(trnId)}
-                        className="rounded-xl border border-red-200 bg-red-50 p-2 text-red-600 hover:bg-red-100 disabled:opacity-50 transition active:scale-95"
-                        title="Delete Transcript"
+                        className="rounded-xl border border-rose-100 bg-rose-50/50 p-1.5 text-rose-600 hover:bg-rose-100 disabled:opacity-50 transition shadow-2xs"
+                        title="Delete transcript"
                       >
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
-
-                  {/* Detected Speakers Chips */}
-                  {Array.isArray(t.detectedSpeakers) && t.detectedSpeakers.length > 0 && (
-                    <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mr-1">
-                        Speakers:
-                      </span>
-                      {t.detectedSpeakers.map((spk, idx) => (
-                        <span
-                          key={idx}
-                          className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-700"
-                        >
-                          {spk}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -785,127 +879,112 @@ Example formats supported:
         )}
       </div>
 
-      {/* 4. UTTERANCE DETAIL MODAL */}
+      {/* Utterance Detail Inspection Modal */}
       {selectedTranscript && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-4xl max-h-[85vh] rounded-2xl bg-white shadow-2xl flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-gray-100 p-5 shrink-0">
-              <div className="min-w-0 pr-4">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-[#2563EB] uppercase">
+            <div className="p-5 border-b border-gray-200 flex items-start justify-between gap-4 bg-gray-50/80">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-700">
                     {selectedTranscript.sourceFormat || "Transcript"}
                   </span>
-                  {selectedTranscript.parseConfidence !== undefined &&
-                    renderConfidenceBadge(selectedTranscript.parseConfidence)}
-                  <span className="text-xs text-gray-500">
-                    {selectedTranscript.utteranceCount ?? selectedTranscript.utterances?.length ?? 0} Turns
-                  </span>
+                  {renderConfidenceBadge(selectedTranscript.parseConfidence)}
                 </div>
                 <h3 className="text-base font-bold text-gray-900 truncate">
-                  {selectedTranscript.title || "Transcript Utterances"}
+                  {selectedTranscript.title}
                 </h3>
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleCopyTranscriptDialogue}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-2xs transition"
-                  title="Copy full dialogue text"
-                >
-                  {copiedUtterances ? (
-                    <>
-                      <ClipboardDocumentCheckIcon className="h-4 w-4 text-emerald-600" />
-                      <span className="text-emerald-700">Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <ClipboardDocumentIcon className="h-4 w-4 text-gray-500" />
-                      <span>Copy Dialogue</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedTranscript(null)}
-                  className="rounded-xl p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition"
-                >
-                  <XMarkIcon className="h-5 w-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTranscript(null)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
             </div>
 
-            {/* Filter Search */}
-            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/60 shrink-0">
-              <div className="relative">
+            {/* Toolbar */}
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
                 <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
                   value={utteranceSearch}
                   onChange={(e) => setUtteranceSearch(e.target.value)}
-                  placeholder="Filter dialogue by speaker or keyword…"
-                  className="w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 py-1.5 text-xs text-gray-900 focus:border-[#2563EB] focus:outline-none"
+                  placeholder="Search verbatim dialogue…"
+                  className="w-full rounded-xl border border-gray-200 pl-9 pr-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:border-[#2563EB]"
                 />
               </div>
+
+              <button
+                type="button"
+                onClick={handleCopyUtterances}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-2xs"
+              >
+                {copiedUtterances ? (
+                  <>
+                    <ClipboardDocumentCheckIcon className="h-4 w-4 text-emerald-600" />
+                    <span className="text-emerald-700">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <ClipboardDocumentIcon className="h-4 w-4 text-gray-500" />
+                    <span>Copy Full Dialogue</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            {/* Scrollable Utterance List */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-2">
               {isLoadingDetail ? (
-                <div className="flex items-center justify-center p-12 text-xs text-gray-500">
-                  <ArrowPathIcon className="h-5 w-5 animate-spin mr-2 text-[#2563EB]" />
-                  Loading transcript turns…
+                <div className="p-8 text-center text-xs text-gray-500">
+                  <ArrowPathIcon className="h-6 w-6 animate-spin mx-auto text-blue-600 mb-2" />
+                  Loading verbatim dialogue turns…
                 </div>
               ) : filteredUtterances.length === 0 ? (
-                <div className="p-12 text-center text-xs text-gray-500">
-                  No dialogue utterances found matching your filter.
+                <div className="p-8 text-center text-xs text-gray-500">
+                  No turns matched your search.
                 </div>
               ) : (
-                filteredUtterances.map((u, idx) => (
+                filteredUtterances.map((u, i) => (
                   <div
-                    key={u.id || idx}
-                    className="rounded-xl border border-gray-200/90 bg-white p-3.5 shadow-2xs space-y-1.5 hover:border-blue-200 transition"
+                    key={u.id || i}
+                    className="rounded-xl border border-gray-200/80 bg-white p-3 text-xs shadow-2xs space-y-1 hover:border-blue-200 transition"
                   >
-                    <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center justify-between text-[11px]">
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-200/60 px-2 py-0.5 text-[11px] font-bold text-blue-900">
+                        <span className="rounded bg-gray-100 px-2 py-0.5 font-bold text-gray-800">
                           {u.speakerLabel || "Unknown Speaker"}
                         </span>
-                        {u.isFiller && (
-                          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
-                            Small Talk / Filler
+                        {u.seq !== undefined && (
+                          <span className="text-gray-400 font-mono text-[10px]">
+                            #{u.seq}
                           </span>
                         )}
                       </div>
-
-                      <div className="flex items-center gap-2 text-[11px] text-gray-400">
-                        {u.startMs !== null && u.startMs !== undefined && (
-                          <span className="font-mono text-gray-500">
-                            {formatTime(u.startMs)}
-                            {u.endMs ? ` - ${formatTime(u.endMs)}` : ""}
-                          </span>
-                        )}
-                        <span className="text-gray-300 font-mono">#{u.seq ?? idx + 1}</span>
-                      </div>
+                      {u.startMs !== null && u.startMs !== undefined && (
+                        <span className="text-gray-400 font-mono">
+                          {formatTime(u.startMs)}
+                        </span>
+                      )}
                     </div>
-
-                    <p className="text-xs text-gray-800 leading-relaxed font-sans">{u.text}</p>
+                    <p className="text-gray-700 leading-relaxed font-sans pl-1">
+                      {u.text}
+                    </p>
                   </div>
                 ))
               )}
             </div>
 
             {/* Footer */}
-            <div className="flex justify-between items-center border-t border-gray-100 p-4 bg-gray-50 shrink-0 text-xs text-gray-500">
-              <span>
-                Showing {filteredUtterances.length} of {selectedTranscript.utterances?.length ?? 0} dialogue turns
-              </span>
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setSelectedTranscript(null)}
-                className="rounded-xl bg-gray-900 px-4 py-2 text-xs font-bold text-white hover:bg-gray-800 transition shadow-2xs"
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100"
               >
                 Close
               </button>
@@ -913,7 +992,24 @@ Example formats supported:
           </div>
         </div>
       )}
+
+      {/* Speaker Mapping Modal */}
+      {mappingTranscript && (
+        <SpeakerMappingModal
+          isOpen={Boolean(mappingTranscript)}
+          onClose={() => setMappingTranscript(null)}
+          transcriptId={mappingTranscript.id || mappingTranscript._id}
+          transcriptTitle={mappingTranscript.title}
+          projectId={projectId}
+          toast={toast}
+          onSuccess={() => {
+            setMappingTranscript(null);
+            if (onRefreshTranscripts) {
+              onRefreshTranscripts();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
-

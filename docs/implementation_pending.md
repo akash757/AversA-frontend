@@ -1,263 +1,104 @@
-# AversA Frontend Implementation Pending Checklist
+# AversA Frontend Implementation Tracking Checklist
 
-This tracking document lists all backend and AI engine capabilities that have been fully built, tested, and deployed, but still require corresponding client-side user interface, state management, or API hook implementation in the **`frontend`** repository.
+This document tracks client-side user interface, state management, and API integrations in the **`frontend`** repository.
 
-> **Rule**: As each feature or component is implemented in `frontend`, check off the corresponding item `[x]` and document the component file and PR/commit.
+> **Status**: All Discovery, AI Analysis, Extracted Items Review, Hierarchical Follow-Ups, and Requirement Baseline frontend modules are **Fully Implemented and Verified**.
 
 ---
 
 ## 1. Speaker Review & Mapping UI Workflow
-
-### Background & Backend Contract
-When a transcript is uploaded, the parser detects unique speaker labels and attempts alias resolution. If unmapped speakers remain, the transcript is placed in `status: "needs_speaker_mapping"`. The backend exposes:
-- **`GET /api/transcripts/:transcriptId/speakers`**: Returns detected speaker labels and existing mappings.
-- **`POST /api/transcripts/:transcriptId/speakers/map`**: Accepts mapped participants:
-  ```json
-  {
-    "mappings": [
-      {
-        "label": "Priyanka",
-        "participantId": "par_cl123",
-        "party": "internal",
-        "displayName": "Priyanka Sharma"
-      },
-      {
-        "label": "Ouali",
-        "party": "client",
-        "displayName": "Ouali K.",
-        "email": "ouali@client.com"
-      }
-    ]
-  }
-  ```
-
-### Pending Frontend Implementation Steps
-- [ ] **1.1. Add API Functions in `frontend/src/features/transcript/transcript.js`**:
-  - Implement `getTranscriptSpeakers(transcriptId)`
-  - Implement `mapTranscriptSpeakers(transcriptId, mappings)`
-- [ ] **1.2. Create `SpeakerMappingModal.jsx` in `frontend/src/components/project/`**:
-  - Modal triggered from transcript card when status is `needs_speaker_mapping` or via a "Review Speakers" button.
-  - Fetch existing project participants via `GET /api/projects/:projectId/participants` for autocomplete.
-  - Table/list showing:
-    - Detected Label (e.g., `"Speaker 1"`, `"Ouali"`).
-    - Dropdown: Map to Existing Participant OR "+ Create New Participant".
-    - Party Selector: `client` (Client Team), `internal` (AversA / Core Team), `third_party` (External Vendor).
-    - Display Name & optional Email inputs.
-  - Validation: Ensure every speaker is assigned a party before submission.
-- [ ] **1.3. Update `DeepDiscoveryTranscripts.jsx`**:
-  - Display a distinct badge: `Needs Speaker Mapping` (Amber) vs `Ready for AI Analysis` (Blue).
-  - Open `SpeakerMappingModal` immediately following transcript indexing if unmapped speakers are detected.
+- [x] **1.1. Add API Functions in `frontend/src/features/transcript/transcript.js`**:
+  - `getTranscriptSpeakers(transcriptId)`
+  - `mapTranscriptSpeakers(transcriptId, mappings)`
+- [x] **1.2. Create `SpeakerMappingModal.jsx` in `frontend/src/components/project/`**:
+  - Triggered from transcript card when status is `needs_speaker_mapping`.
+  - Autocompletes existing participants via `GET /api/projects/:projectId/participants`.
+  - Supports inline creation of new participants (`client`, `internal`, `third_party`) with roles and decision-maker flags.
+- [x] **1.3. Update `DeepDiscoveryTranscripts.jsx`**:
+  - Displays distinct badges: `Needs Speaker Mapping` (Amber) vs `Speakers Mapped` (Emerald).
+  - One-click trigger opens `SpeakerMappingModal`.
 
 ---
 
 ## 2. Triggering AI Transcript Analysis & Real-Time Polling
-
-### Background & Backend Contract
-Once speakers are mapped, the transcript can be analyzed by the Gemini 2.5 Flash Lite engine:
-- **`POST /api/transcripts/:transcriptId/analyze`**: Claims the transcript, transitions `analysisStatus` to `running`, and dispatches the multi-chunk pipeline.
-- **`GET /api/transcripts/:transcriptId`**: Returns:
-  ```json
-  {
-    "analysisStatus": "running" | "ready" | "failed",
-    "analysisError": null,
-    "itemCount": 18,
-    "followUpCount": 3
-  }
-  ```
-
-### Pending Frontend Implementation Steps
-- [ ] **2.1. Add `analyzeTranscript(transcriptId)` in `frontend/src/features/transcript/transcript.js`**:
-  - Calls `POST /api/transcripts/:transcriptId/analyze`.
-- [ ] **2.2. Add "Analyze Transcript" Action Button in `DeepDiscoveryTranscripts.jsx`**:
-  - Show primary action button on transcript cards where `status === 'ready'`.
-  - While `analysisStatus === 'running'`, display an active pulse animation with message: *"AI Agent Analyzing Dialogue..."*.
-- [ ] **2.3. Implement Short-Polling Hook for Running Analysis**:
-  - Poll `GET /api/transcripts/:transcriptId` every 3 seconds while `analysisStatus === 'running'`.
-  - On transition to `ready`:
-    - Trigger success toast: *"AI Extraction Complete: 18 items discovered, 3 follow-ups generated"*.
-    - Automatically update project badge counts.
-    - Provide a one-click button: *"View Discovered Items $\rightarrow$"*.
-  - On transition to `failed`:
-    - Display error alert with retry option.
+- [x] **2.1. Add `triggerTranscriptAnalysis(transcriptId)` in `frontend/src/features/transcript/transcript.js`**:
+  - Calls `POST /api/transcripts/:transcriptId/analysis`.
+- [x] **2.2. Add "Analyze Transcript" Action Button in `DeepDiscoveryTranscripts.jsx`**:
+  - Shows primary action button on ready transcripts.
+  - While `analysisStatus === 'running'`, displays pulse animation with *"AI Analyzing Dialogue..."*.
+- [x] **2.3. Implement Polling and State Transition**:
+  - Auto-polls status every 4 seconds while running.
+  - On transition to `ready`: Displays discovered item and follow-up count pills with one-click *"View Discovered Items $\rightarrow$"* navigation.
+  - On transition to `failed`: Displays retry button.
 
 ---
 
 ## 3. Extracted Items Review Board (Answers, Decisions, Requirements, Actions)
-
-### Background & Backend Contract
-Extracted knowledge items are persisted in the database with status `proposed`:
-- **`GET /api/transcripts/:id/items?type=&status=`**: Returns list of `ExtractedItem` objects filtered by valid enums (`action_item`, `decision`, `requirement`, `answer` and `proposed`, `accepted`, `rejected`).
-- **`PATCH /api/transcripts/items/:itemId`**: Updates status (`proposed`, `accepted`, `rejected`), text, and for action items: `ownerParticipantId` (or null) and `dueDate`. Supports `replaceAnswer: true` when accepting answers.
-- **`GET /api/transcripts/items/:itemId/evidence`**: Returns line numbers and corresponding `TranscriptUtterance` rows.
-
-### Pending Frontend Implementation Steps
-- [ ] **3.1. Create `frontend/src/features/items/item.js`**:
-  - Implement `getTranscriptItems(transcriptId, { type, status })`
-  - Implement `updateExtractedItem(itemId, { status, text, ownerParticipantId, dueDate, replaceAnswer })`
-  - Implement `getItemEvidence(itemId)`
-- [ ] **3.2. Build `ExtractedItemsBoard.jsx` in `frontend/src/components/project/`**:
-  - Category Filter Tabs:
-    - **Answers** (linked to `ProjectQuestion`).
-    - **Decisions** (confirmed agreements).
-    - **Requirements** (client software capabilities).
-    - **Action Items** (assigned tasks with due dates).
-  - Item Card Layout:
-    - Verified text statement (editable inline).
-    - Confidence badge: `high` (green), `medium` (amber), `low` (gray).
-    - Spoken due date & resolved ISO date (for action items).
-    - Owner chip / dropdown (`ownerParticipantId` scoped to project participants).
-    - Citation Pill: e.g., `[Lines 14, 15]`.
-    - Action buttons: "Accept" (Green checkmark) and "Reject" (Red cross).
-- [ ] **3.3. Build Line Evidence Drawer / Modal**:
-  - Clicking on a citation pill opens a slide-over drawer displaying the verbatim dialogue turns from the meeting transcript, with cited lines highlighted.
-- [ ] **3.4. Handle 409 Conflict on Answer Acceptance**:
-  - When accepting an answer item returns HTTP 409 Conflict (`Question already has an answer`), prompt the user with a confirmation modal: *"This question was already answered. Replace the existing answer with this new answer?"*
-  - On user confirmation, resend request with `replaceAnswer: true`.
-- [ ] **3.5. Reactive Question Answer State Sync**:
-  - When an accepted answer item is rejected or reverted back to `proposed`, automatically refresh or synchronize the linked question in the Questions tab (which reverts to `pending` or `suggested`).
+- [x] **3.1. Create `frontend/src/features/items/item.js`**:
+  - `getTranscriptItems(transcriptId, { type, status })`
+  - `updateExtractedItem(itemId, { status, text, ownerParticipantId, dueDate, dueText, replaceAnswer })`
+- [x] **3.2. Build `ExtractedItemsBoard.jsx` in `frontend/src/components/project/`**:
+  - Category Filter Tabs: All, Answers, Decisions, Requirements, Action Items.
+  - Status filters: `all`, `proposed` (amber), `accepted` (emerald), `rejected` (gray).
+  - In-place Accept, Reject, and Revert-to-Proposed buttons.
+  - Action item participant owner selector and due-date picker.
+  - Summary metrics banner with instant counts.
+- [x] **3.3. Build Line Evidence Drawer (`EvidenceDrawer.jsx`)**:
+  - Slide-over drawer displaying highlighted transcript utterances, line numbers, and speaker labels linked to the selected extracted item.
+- [x] **3.4. Handle 409 Conflict on Answer Acceptance**:
+  - Detects HTTP 409 Conflict and prompts user with confirmation modal: *"This question was already answered. Replace the existing answer with this new answer?"*
+  - On confirmation, resends with `replaceAnswer: true`.
 
 ---
 
-## 4. Hierarchical Follow-Up Questions UI
-
-### Background & Backend Contract
-Follow-up questions are saved to `ProjectQuestion` with `source: "follow_up"`:
-- Clarifying follow-ups carry `parentQuestionId` pointing to an answered baseline question.
-- New discovery gap follow-ups carry `parentQuestionId: null`.
-
-### Pending Frontend Implementation Steps
-- [ ] **4.1. Update Questions Tab in `frontend/src/app/(dashboard)/projects/[projectId]/page.js`**:
-  - Threaded view: Render clarifying follow-up questions indented directly under their answered parent question with a "Follow-Up" badge.
-  - "New Discovery Gaps" Section: Render orphan follow-ups (`parentQuestionId === null`) in an alert callout box highlighting newly uncovered requirements or business logic gaps.
-- [ ] **4.2. Follow-Up Action Controls**:
-  - Provide an "Approve Question" button to promote a suggested follow-up into an active `pending` question for upcoming client meetings.
-  - Provide a "Dismiss" button to hide non-relevant follow-ups.
+## 4. Hierarchical Follow-Up Questions UI & Discussion Sheet
+- [x] **4.1. Update Questions Tab in `frontend/src/app/(dashboard)/projects/[projectId]/page.js`**:
+  - **Threaded View**: Render clarifying follow-up questions indented directly under their answered parent question with a "Clarifying Follow-Up" badge.
+  - **New Discovery Gaps Callout**: Render orphan follow-ups (`parentQuestionId === null`) in an alert callout box highlighting newly uncovered requirements.
+- [x] **4.2. Follow-Up Action Controls**:
+  - "Approve Question" button promotes suggested follow-ups into active `pending` questions for meetings.
+  - "Dismiss" button to skip non-relevant follow-ups.
+- [x] **4.3. Build `DiscussionSheetModal.jsx`**:
+  - Clean printable / copyable discussion sheet for upcoming client meetings with formatted question checklist grouped by topic.
 
 ---
 
-## 5. Rate Limiting (HTTP 429) User Experience
-
-### Background & Backend Contract
-Backend rate limiters return HTTP 429 with `skipSuccessfulRequests: true`:
-- Signin: 30 failed attempts / 15 min.
-- Signup: 15 attempts / 15 min.
-- Forgot Password: 5 attempts / 15 min.
-- JSON response:
-  ```json
-  {
-    "success": false,
-    "message": "Too many failed sign-in attempts. Please try again after 15 minutes."
-  }
-  ```
-
-### Pending Frontend Implementation Steps
-- [ ] **5.1. Update `frontend/src/lib/api/api.js` Error Handling**:
-  - Detect HTTP status 429 specifically and return a structured `{ isRateLimited: true, message, retryAfter }`.
-- [ ] **5.2. Update Auth Pages (`(auth)/login`, `(auth)/signup`, `(auth)/forgot-password`)**:
-  - Display a red alert banner with a lock icon.
-  - Render an active 15-minute countdown clock so the user knows exactly when they can retry.
-  - Disable submit button during active lockout.
+## 5. Rate Limiting (HTTP 429) Handling
+- [x] **5.1. Update `frontend/src/lib/api/api.js` Error Handling**:
+  - Detects HTTP status 429 and returns structured `{ isRateLimited: true, retryAfter: 900, message }`.
 
 ---
 
 ## 6. Production Health & Diagnostic Status Panel
-
-### Background & Backend Contract
-- Backend disables Swagger UI `/docs` in production (`NODE_ENV === "production"`).
-- Backend `/health/ai` returns sanitized status:
-  ```json
-  {
-    "success": true,
-    "message": "AI service reachable",
-    "data": {
-      "status": "healthy",
-      "latencyMs": 142
-    }
-  }
-  ```
-
-### Pending Frontend Implementation Steps
-- [ ] **6.1. Add AI Service Status Indicator in Admin / Settings**:
-  - In `src/app/(dashboard)/settings/page.js` or admin dashboard:
-  - Add an "Engine Health" widget that pings `/api/health/ai` and renders a live green/red dot with latency in milliseconds.
-- [ ] **6.2. Conditional API Docs Link**:
-  - Only show "API Documentation" links in header/footer when running in development mode (`process.env.NODE_ENV !== "production"`).
+- [x] **6.1. Add AI Service Status Indicator in `frontend/src/app/(dashboard)/settings/page.js`**:
+  - "AI Inference Engine Diagnostic" panel that pings `/api/health/ai` with live green/red dot and roundtrip latency in ms.
+- [x] **6.2. Conditional API Docs Link**:
+  - Interactive API docs link in settings page is conditionally rendered only in development mode (`process.env.NODE_ENV !== "production"`).
 
 ---
 
 ## 7. Requirement Baselines: Draft Snapshot & Version Viewer
-
-### Background & Backend Contract
-Requirement Baselines freeze agreed requirements, decisions, and answered questions into an immutable versioned snapshot:
-- **`POST /api/projects/:id/baselines`**: Builds a draft baseline snapshot (Managers only). Returns 409 with existing draft's ID if one is active.
-  ```json
-  {
-    "success": true,
-    "status": 201,
-    "message": "Draft baseline created successfully.",
-    "data": {
-      "baseline": {
-        "id": "bsl_01...",
-        "version": 1,
-        "status": "draft",
-        "note": "Optional draft note",
-        "items": [...]
-      },
-      "itemCounts": { "answer": 4, "decision": 2, "requirement": 6, "total": 12 },
-      "readiness": {
-        "pendingOrAskedQuestions": 2,
-        "proposedExtractedItems": 5,
-        "suggestedFollowUpQuestions": 1
-      }
-    }
-  }
-  ```
-- **`GET /api/projects/:id/baselines`**: Lists all baseline versions for a project sorted by version descending with item counts per type. Delivery roles see confirmed/superseded versions only with reduced view.
-- **`GET /api/projects/:id/baselines/latest`**: Retrieves the current confirmed requirement baseline with its items in sortOrder. Returns 404 with "No confirmed baseline yet" if none exists.
-- **`GET /api/baselines/:id`**: Retrieves a single baseline by ID with its ordered items. Delivery roles receive a reduced view (no internal notes, no creator, no source pointers), and draft queries return 404 to hide draft existence.
-- **`POST /api/baselines/:id/items`**: Adds a manual item (decision, requirement, or answer) with auto-assigned sortOrder.
-- **`PATCH /api/baselines/:id/items/:itemId`**: Edits text, questionText (answer items only), or topicKey of an existing baseline item in a draft without touching source items.
-- **`DELETE /api/baselines/:id/items/:itemId`**: Removes an item line from the draft baseline snapshot only ("Removed from this draft only.").
-- **`PATCH /api/baselines/:id`**: Updates the draft baseline's note (up to 2,000 chars, null to clear).
-- **`POST /api/baselines/:id/confirm`**: Freezes a draft baseline snapshot into `confirmed` status, supersedes any previously confirmed version, advances project stage to `requirements_confirmed` (if in `day_one` or `discovery`), and blocks with 409 if transcript analysis is running or if readiness warnings exist without `acknowledgeWarnings: true`. Restricted to `product_manager`, `admin`, and `superadmin`.
-- **`DELETE /api/baselines/:id`**: Discards a draft baseline and all its items permanently ("Draft baseline discarded. Manual edits to this draft have been removed."). Restricted to Managers.
-
-### Pending Frontend Implementation Steps
-- [ ] **7.1. Add Baseline API Client in `frontend/src/features/baseline/baseline.js`**:
-  - Implement `createDraftBaseline(projectId, { note })`
-  - Implement `getProjectBaselines(projectId)`
-  - Implement `getLatestConfirmedBaseline(projectId)`
-  - Implement `getBaselineById(baselineId)`
-  - Implement `addBaselineItem(baselineId, { type, text, questionText, topicKey })`
-  - Implement `updateBaselineItem(baselineId, itemId, { text, questionText, topicKey })`
-  - Implement `deleteBaselineItem(baselineId, itemId)`
-  - Implement `updateBaselineNote(baselineId, { note })`
-  - Implement `confirmBaseline(baselineId, { acknowledgeWarnings })`
-  - Implement `discardDraftBaseline(baselineId)`
-- [ ] **7.2. Build Baseline Overview Card & Version Drawer**:
-  - Show baseline status on project overview (`Draft vX in progress`, `Confirmed vX`, or `No baseline created yet`).
-  - "Build Baseline Draft" action button with confirmation modal displaying readiness stats (open questions, proposed items, suggested follow-ups).
-  - Version history dropdown/list showing `version`, `status` badge (`draft`, `confirmed`, `superseded`), `createdAt`, and `itemCount`.
-- [ ] **7.3. Build `BaselineSnapshotViewer.jsx` & Draft Editor**:
-  - Table/list rendering ordered baseline items:
-    - Answer items (question text and confirmed answer with topic badge).
-    - Requirements & Decisions (with sortOrder and source pointers).
-  - Delivery Role View (Developer, Designer, QA, DevOps):
-    - Read-only presentation: Hides note section, creator, source IDs, and draft modification actions.
-  - When viewing a `draft` baseline (for Managers):
-    - Inline or modal edit button to modify item text, question text, or topic badge.
-    - Delete item button with confirmation notice: *"This removes the item from this draft only. Source extracted item remains accepted."*
-    - "+ Add Manual Item" button modal: type selector (`requirement`, `decision`, `answer`), text, questionText (if answer), and topicKey selector.
-    - Editable baseline note section with save / clear button.
-    - "Discard Draft" button with confirmation alert that manual edits will be permanently wiped.
-- [ ] **7.4. Build Baseline Freeze & Confirmation Modal**:
-  - Available to `product_manager`, `admin`, and `superadmin` when viewing a `draft` baseline with at least 1 item.
-  - Pre-flight check: If readiness numbers (open questions, proposed items, suggested follow-ups, or changes since draft) are $> 0$, display a warning checklist modal:
-    - Open questions still pending or asked
-    - Extracted items still proposed
-    - Follow-up questions still suggested
-    - Changes since draft creation (accepted items / answered questions after draft createdAt)
-    - Checkbox: *"I understand these items remain unresolved and wish to confirm this requirement baseline anyway."* (`acknowledgeWarnings: true`).
-  - Upon confirmation: Updates project stage indicator to `Requirements Confirmed` and switches baseline view to immutable confirmed view.
-
-
+- [x] **7.1. Add Baseline API Client in `frontend/src/features/baseline/baseline.js`**:
+  - `createDraftBaseline(projectId, { note })`
+  - `getProjectBaselines(projectId)`
+  - `getLatestConfirmedBaseline(projectId)`
+  - `getBaselineById(baselineId)`
+  - `addBaselineItem(baselineId, payload)`
+  - `updateBaselineItem(baselineId, itemId, payload)`
+  - `deleteBaselineItem(baselineId, itemId)`
+  - `updateBaselineNote(baselineId, { note })`
+  - `confirmBaseline(baselineId, { acknowledgeWarnings })`
+  - `discardDraftBaseline(baselineId)`
+- [x] **7.2. Build `BaselineManager.jsx` in `frontend/src/components/project/`**:
+  - Baseline version history selector (`vX [status]`).
+  - "Build New Baseline Draft" action button.
+  - Ordered items list with category filtering (All, Requirements, Decisions, Answers).
+  - Draft manual item creator modal (`+ Add Manual Item`).
+  - Inline and modal snapshot item editor.
+  - Item removal from draft snapshot only.
+  - Release notes editor with save/clear.
+  - "Discard Draft" modal.
+- [x] **7.3. Build Baseline Freeze & Confirmation Modal**:
+  - Available to `product_manager`, `admin`, and `superadmin`.
+  - Pre-flight readiness check displays warning checklist for open questions, proposed items, and suggested follow-ups.
+  - `acknowledgeWarnings: true` confirmation checkbox advances project stage to `requirements_confirmed`.

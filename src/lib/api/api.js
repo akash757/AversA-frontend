@@ -96,11 +96,32 @@ function toResponseEnvelope(payload, response) {
     const withStatus =
       typeof payload.status === "number" ? payload : { ...payload, status: response.status };
 
+    if (response.status === 429) {
+      return {
+        ...withStatus,
+        success: false,
+        isRateLimited: true,
+        retryAfter: 900,
+        message: withStatus.message || "Too many requests. Please try again after 15 minutes.",
+      };
+    }
+
     if (typeof withStatus.success === "boolean") {
       return withStatus;
     }
 
     return { ...withStatus, success: response.ok };
+  }
+
+  if (response.status === 429) {
+    return {
+      success: false,
+      status: 429,
+      isRateLimited: true,
+      retryAfter: 900,
+      message: "Too many requests. Please try again after 15 minutes.",
+      data: null,
+    };
   }
 
   return {
@@ -186,29 +207,39 @@ async function request(endpoint, options = {}) {
   }
 }
 
-// Silent token refresh
+let refreshPromise = null;
+
+// Silent token refresh with in-flight deduplication
 export async function silentRefresh() {
-  try {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) return false;
+  if (refreshPromise) return refreshPromise;
 
-    const res = await fetchWithTimeout(`${BASE_URL}/auth/refresh-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
+  refreshPromise = (async () => {
+    try {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) return false;
 
-    const parsed = await parseJsonSafely(res);
-    const data = toResponseEnvelope(parsed, res);
+      const res = await fetchWithTimeout(`${BASE_URL}/auth/refresh-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
 
-    if (data.success && data.data?.accessToken) {
-      setTokens(data.data.accessToken, refreshToken);
-      return true;
+      const parsed = await parseJsonSafely(res);
+      const data = toResponseEnvelope(parsed, res);
+
+      if (data.success && data.data?.accessToken) {
+        setTokens(data.data.accessToken, refreshToken);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
     }
-    return false;
-  } catch {
-    return false;
-  }
+  })();
+
+  return refreshPromise;
 }
 
 /**
