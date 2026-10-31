@@ -183,3 +183,63 @@ Backend rate limiters return HTTP 429 with `skipSuccessfulRequests: true`:
 - [ ] **6.2. Conditional API Docs Link**:
   - Only show "API Documentation" links in header/footer when running in development mode (`process.env.NODE_ENV !== "production"`).
 
+---
+
+## 7. Requirement Baselines: Draft Snapshot & Version Viewer
+
+### Background & Backend Contract
+Requirement Baselines freeze agreed requirements, decisions, and answered questions into an immutable versioned snapshot:
+- **`POST /api/projects/:id/baselines`**: Builds a draft baseline snapshot (Managers only). Returns 409 with existing draft's ID if one is active.
+  ```json
+  {
+    "success": true,
+    "status": 201,
+    "message": "Draft baseline created successfully.",
+    "data": {
+      "baseline": {
+        "id": "bsl_01...",
+        "version": 1,
+        "status": "draft",
+        "note": "Optional draft note",
+        "items": [...]
+      },
+      "itemCounts": { "answer": 4, "decision": 2, "requirement": 6, "total": 12 },
+      "readiness": {
+        "pendingOrAskedQuestions": 2,
+        "proposedExtractedItems": 5,
+        "suggestedFollowUpQuestions": 1
+      }
+    }
+  }
+  ```
+- **`GET /api/projects/:id/baselines`**: Lists all baseline versions for a project sorted by version descending with item counts.
+- **`GET /api/baselines/:id`**: Retrieves a single baseline by ID with its ordered items.
+- **`POST /api/baselines/:id/items`**: Adds a manual item (decision, requirement, or answer) with auto-assigned sortOrder.
+- **`PATCH /api/baselines/:id/items/:itemId`**: Edits text, questionText (answer items only), or topicKey of an existing baseline item in a draft without touching source items.
+- **`DELETE /api/baselines/:id/items/:itemId`**: Removes an item line from the draft baseline snapshot only ("Removed from this draft only.").
+- **`PATCH /api/baselines/:id`**: Updates the draft baseline's note (up to 2,000 chars, null to clear).
+
+### Pending Frontend Implementation Steps
+- [ ] **7.1. Add Baseline API Client in `frontend/src/features/baseline/baseline.js`**:
+  - Implement `createDraftBaseline(projectId, { note })`
+  - Implement `getProjectBaselines(projectId)`
+  - Implement `getBaselineById(baselineId)`
+  - Implement `addBaselineItem(baselineId, { type, text, questionText, topicKey })`
+  - Implement `updateBaselineItem(baselineId, itemId, { text, questionText, topicKey })`
+  - Implement `deleteBaselineItem(baselineId, itemId)`
+  - Implement `updateBaselineNote(baselineId, { note })`
+- [ ] **7.2. Build Baseline Overview Card & Version Drawer**:
+  - Show baseline status on project overview (`Draft vX in progress`, `Confirmed vX`, or `No baseline created yet`).
+  - "Build Baseline Draft" action button with confirmation modal displaying readiness stats (open questions, proposed items, suggested follow-ups).
+  - Version history dropdown/list showing `version`, `status` badge (`draft`, `confirmed`, `superseded`), `createdAt`, and `itemCount`.
+- [ ] **7.3. Build `BaselineSnapshotViewer.jsx` & Draft Editor**:
+  - Table/list rendering ordered baseline items:
+    - Answer items (question text and confirmed answer with topic badge).
+    - Requirements & Decisions (with sortOrder and source pointers).
+  - When viewing a `draft` baseline (for Managers):
+    - Inline or modal edit button to modify item text, question text, or topic badge.
+    - Delete item button with confirmation notice: *"This removes the item from this draft only. Source extracted item remains accepted."*
+    - "+ Add Manual Item" button modal: type selector (`requirement`, `decision`, `answer`), text, questionText (if answer), and topicKey selector.
+    - Editable baseline note section with save / clear button.
+
+
