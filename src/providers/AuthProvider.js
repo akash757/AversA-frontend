@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getMe, logout } from "@/features/auth/auth";
-import { getAccessToken } from "@/lib/api/api";
+import { getAccessToken, getRefreshToken, silentRefresh, isTokenExpired } from "@/lib/api/api";
 
 const SESSION_COOKIE_AGE = 60 * 60 * 24 * 7;
 
@@ -27,7 +27,7 @@ const AuthContext = createContext({
   loading: true,
   isLoggedIn: false,
   handleLogout: () => {},
-  login: (userData) => {},
+  login: () => {},
   refreshUser: async () => {},
 });
 
@@ -36,7 +36,16 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
-    const token = getAccessToken();
+    let token = getAccessToken();
+
+    // Silently refresh before fetching if token is expired or expiring
+    if ((!token || isTokenExpired(token)) && getRefreshToken()) {
+      const refreshed = await silentRefresh();
+      if (refreshed) {
+        token = getAccessToken();
+      }
+    }
+
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -52,7 +61,7 @@ export function AuthProvider({ children }) {
         setUser(null);
         clearUserCookies();
       }
-    } catch (error) {
+    } catch {
       setUser(null);
       clearUserCookies();
     } finally {
@@ -63,6 +72,19 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  // Proactively refresh access token every 10 minutes while active
+  useEffect(() => {
+    if (!user) return;
+    const intervalId = setInterval(async () => {
+      const refreshToken = getRefreshToken();
+      if (refreshToken) {
+        await silentRefresh();
+      }
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [user]);
 
   const handleLogout = useCallback(() => {
     logout();

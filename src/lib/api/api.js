@@ -23,6 +23,8 @@ function resolveBaseUrl() {
 export const BASE_URL = resolveBaseUrl();
 // Access token cookie expiry aligned with 15-minute access token lifetime
 const ACCESS_TOKEN_COOKIE_AGE = 60 * 15;
+// Refresh token cookie expiry aligned with 7-day session lifetime
+const REFRESH_TOKEN_COOKIE_AGE = 60 * 60 * 24 * 7;
 const REQUEST_TIMEOUT_MS = 60000; // Increased to 60s for long AI requests
 
 // Token helpers
@@ -37,12 +39,17 @@ export function getRefreshToken() {
 }
 
 export function setTokens(accessToken, refreshToken) {
-  localStorage.setItem("accessToken", accessToken);
+  if (accessToken) localStorage.setItem("accessToken", accessToken);
   if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
-  if (typeof document !== "undefined" && accessToken) {
+  if (typeof document !== "undefined") {
     const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
     const secureFlag = isSecure ? "; Secure" : "";
-    document.cookie = `accessToken=${encodeURIComponent(accessToken)}; path=/; max-age=${ACCESS_TOKEN_COOKIE_AGE}; samesite=lax${secureFlag}`;
+    if (accessToken) {
+      document.cookie = `accessToken=${encodeURIComponent(accessToken)}; path=/; max-age=${ACCESS_TOKEN_COOKIE_AGE}; samesite=lax${secureFlag}`;
+    }
+    if (refreshToken) {
+      document.cookie = `refreshToken=${encodeURIComponent(refreshToken)}; path=/; max-age=${REFRESH_TOKEN_COOKIE_AGE}; samesite=lax${secureFlag}`;
+    }
   }
 }
 
@@ -53,6 +60,7 @@ export function clearTokens() {
     const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
     const secureFlag = isSecure ? "; Secure" : "";
     document.cookie = `accessToken=; path=/; max-age=0; samesite=lax${secureFlag}`;
+    document.cookie = `refreshToken=; path=/; max-age=0; samesite=lax${secureFlag}`;
     document.cookie = `userRole=; path=/; max-age=0; samesite=lax${secureFlag}`;
     document.cookie = `userStatus=; path=/; max-age=0; samesite=lax${secureFlag}`;
   }
@@ -132,6 +140,82 @@ function toResponseEnvelope(payload, response) {
   };
 }
 
+let refreshPromise = null;
+
+/**
+ * Checks if a JWT access token is expired or close to expiration (30s buffer).
+ */
+export function isTokenExpired(token) {
+  if (!token || typeof token !== "string") return true;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return true;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonStr =
+      typeof window !== "undefined"
+        ? decodeURIComponent(
+            atob(base64)
+              .split("")
+              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+              .join("")
+          )
+        : Buffer.from(base64, "base64").toString("utf-8");
+    const payload = JSON.parse(jsonStr);
+    if (!payload.exp) return false;
+    // Buffer by 30 seconds
+    return Date.now() >= payload.exp * 1000 - 30000;
+  } catch {
+    return true;
+  }
+}
+
+// Silent token refresh with in-flight deduplication
+export async function silentRefresh() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) return false;
+
+      const res = await fetchWithTimeout(`${BASE_URL}/auth/refresh-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      const parsed = await parseJsonSafely(res);
+      const data = toResponseEnvelope(parsed, res);
+
+      if (data.success && data.data?.accessToken) {
+        setTokens(data.data.accessToken, data.data.refreshToken || refreshToken);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+/**
+ * Retrieves a guaranteed fresh, unexpired access token, refreshing silently if needed.
+ */
+export async function getValidAccessToken() {
+  let token = getAccessToken();
+  if (isTokenExpired(token)) {
+    const refreshed = await silentRefresh();
+    if (refreshed) {
+      token = getAccessToken();
+    }
+  }
+  return token;
+}
+
 // Core request function
 async function request(endpoint, options = {}) {
   const { body, headers: customHeaders, auth = false, ...rest } = options;
@@ -141,9 +225,9 @@ async function request(endpoint, options = {}) {
     ...customHeaders,
   };
 
-  // Attach Bearer token for authenticated requests.
+  // Attach Bearer token for authenticated requests (proactively refreshing if expired).
   if (auth) {
-    const token = getAccessToken();
+    const token = await getValidAccessToken();
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -205,82 +289,6 @@ async function request(endpoint, options = {}) {
       data: null,
     };
   }
-}
-
-let refreshPromise = null;
-
-// Silent token refresh with in-flight deduplication
-export async function silentRefresh() {
-  if (refreshPromise) return refreshPromise;
-
-  refreshPromise = (async () => {
-    try {
-      const refreshToken = getRefreshToken();
-      if (!refreshToken) return false;
-
-      const res = await fetchWithTimeout(`${BASE_URL}/auth/refresh-token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      const parsed = await parseJsonSafely(res);
-      const data = toResponseEnvelope(parsed, res);
-
-      if (data.success && data.data?.accessToken) {
-        setTokens(data.data.accessToken, refreshToken);
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-
-  return refreshPromise;
-}
-
-/**
- * Checks if a JWT access token is expired or close to expiration (30s buffer).
- */
-export function isTokenExpired(token) {
-  if (!token || typeof token !== "string") return true;
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return true;
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const jsonStr =
-      typeof window !== "undefined"
-        ? decodeURIComponent(
-            atob(base64)
-              .split("")
-              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-              .join("")
-          )
-        : Buffer.from(base64, "base64").toString("utf-8");
-    const payload = JSON.parse(jsonStr);
-    if (!payload.exp) return false;
-    // Buffer by 30 seconds
-    return Date.now() >= payload.exp * 1000 - 30000;
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Retrieves a guaranteed fresh, unexpired access token, refreshing silently if needed.
- */
-export async function getValidAccessToken() {
-  let token = getAccessToken();
-  if (isTokenExpired(token)) {
-    const refreshed = await silentRefresh();
-    if (refreshed) {
-      token = getAccessToken();
-    }
-  }
-  return token;
 }
 
 // Convenience methods
