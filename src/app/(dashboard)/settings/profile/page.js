@@ -6,7 +6,7 @@ import { useAuthContext } from "@/providers/AuthProvider";
 import { updateProfile, changePassword } from "@/features/auth/auth";
 import { getOrganizationById, updateOrganization } from "@/features/organizations/organizations";
 import { useToast } from "@/components/Ui/Toast";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 import {
   UserCircleIcon,
   BuildingOfficeIcon,
@@ -132,7 +132,27 @@ export default function ProfilePage() {
     }
   };
 
-  if (authLoading) return <Loader />;
+  if (authLoading) {
+    return (
+      <div className="space-y-6" aria-hidden="true">
+        <div className="space-y-1">
+          <Skeleton variant="line" width="16rem" height="1.75rem" />
+          <Skeleton variant="line" width="22rem" height="0.875rem" />
+        </div>
+        <div className="flex gap-2 border-b border-gray-200 pb-2">
+          <Skeleton variant="block" width="6rem" height="2rem" rounded="md" />
+          <Skeleton variant="block" width="6rem" height="2rem" rounded="md" />
+          <Skeleton variant="block" width="6rem" height="2rem" rounded="md" />
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 space-y-4">
+          <Skeleton variant="avatar" width="4rem" height="4rem" />
+          <Skeleton variant="block" height="2.5rem" rounded="xl" />
+          <Skeleton variant="block" height="2.5rem" rounded="xl" />
+          <Skeleton variant="block" width="8rem" height="2.5rem" rounded="xl" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -15,42 +15,16 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 
+import Avatar from "@/components/Ui/Avatar";
+import Button from "@/components/Ui/Button";
+
 const publicNavLinks = [
   { label: "Product", href: "/#product" },
   { label: "How we work", href: "/#how-we-work" },
   { label: "Agents", href: "/#agents" },
   { label: "FAQ", href: "/#faq" },
+  { label: "Contact", href: "/contact" },
 ];
-
-function UserAvatar({ user, size = "sm" }) {
-  const [imgError, setImgError] = useState(false);
-  const initials =
-    `${(user?.firstName?.[0] || "").toUpperCase()}${(user?.lastName?.[0] || "").toUpperCase()}` ||
-    "O";
-  const sizeClass = size === "sm" ? "h-8 w-8 text-xs" : "h-10 w-10 text-sm";
-
-  if (user?.avatar && !imgError) {
-    return (
-      <div className={`${sizeClass} relative shrink-0 overflow-hidden rounded-full ring-1 ring-white/20`}>
-        <img
-          src={user.avatar}
-          alt={user.firstName}
-          className="h-full w-full object-cover"
-          referrerPolicy="no-referrer"
-          onError={() => setImgError(true)}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`${sizeClass} flex shrink-0 items-center justify-center rounded-full bg-blue-600 font-semibold text-white shadow-sm`}
-    >
-      {initials}
-    </div>
-  );
-}
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -183,7 +157,11 @@ export default function Navbar() {
                     : "border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100"
                 }`}
               >
-                <UserAvatar user={user} size="sm" />
+                <Avatar
+                  src={user?.avatar}
+                  name={`${user?.firstName || ""} ${user?.lastName || ""}`}
+                  size="sm"
+                />
                 <span
                   className={`max-w-[120px] truncate text-xs font-semibold ${
                     darkMode ? "text-white" : "text-gray-800"

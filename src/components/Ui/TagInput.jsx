@@ -15,14 +15,16 @@ export default function TagInput({
   suggestions = [],
   maxTags = 20,
   tagColor = "blue",
+  icon: Icon,
+  className = "",
 }) {
   const [inputValue, setInputValue] = useState("");
 
   const colorStyles = {
-    blue: "bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300",
-    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-300",
-    purple: "bg-purple-50 text-purple-700 border-purple-200 hover:border-purple-300",
-    gray: "bg-gray-100 text-gray-800 border-gray-200 hover:border-gray-300",
+    blue: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE] hover:border-[#93C5FD]",
+    emerald: "bg-[#ECFDF5] text-[#059669] border-[#A7F3D0] hover:border-[#6EE7B7]",
+    purple: "bg-[#F5F3FF] text-[#7C3AED] border-[#DDD6FE] hover:border-[#C4B5FD]",
+    gray: "bg-[#F8FAFC] text-[#475569] border-[#E2E8F0] hover:border-[#CBD5E1]",
   };
 
   const activeColor = colorStyles[tagColor] || colorStyles.blue;
@@ -63,12 +65,18 @@ export default function TagInput({
   );
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 min-h-[42px] rounded-xl border border-gray-200 bg-white p-2 text-xs transition focus-within:border-[#2563EB] focus-within:ring-2 focus-within:ring-blue-500/10">
+    <div className={`space-y-2 ${className}`}>
+      <div className="flex flex-wrap items-center gap-1.5 min-h-[42px] rounded-[12px] border border-[#E2E8F0] bg-white p-2 text-xs transition-all focus-within:border-[#2563EB] focus-within:shadow-[0_0_0_3px_#EFF6FF] hover:border-[#CBD5E1]">
+        {Icon && (
+          <div className="pl-1 pr-1.5 text-[#94A3B8]">
+            <Icon className="h-4 w-4" />
+          </div>
+        )}
+
         {tags.map((tag, idx) => (
           <span
             key={`${tag}-${idx}`}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${activeColor}`}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold shadow-2xs transition ${activeColor}`}
           >
             <span>{tag}</span>
             <button
@@ -94,13 +102,13 @@ export default function TagInput({
               }
             }}
             placeholder={tags.length === 0 ? placeholder : "Add another..."}
-            className="w-full bg-transparent px-1 py-0.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none"
+            className="w-full bg-transparent px-1.5 py-1 text-xs font-medium text-[#0F172A] placeholder:text-[#94A3B8] focus:outline-none"
           />
           {inputValue.trim() && (
             <button
               type="button"
               onClick={() => addTag(inputValue)}
-              className="shrink-0 rounded-md bg-[#2563EB] px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 transition"
+              className="shrink-0 rounded-lg bg-[#2563EB] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#1D4ED8] shadow-xs active:scale-95 transition-all"
             >
               Add
             </button>
@@ -111,13 +119,13 @@ export default function TagInput({
       {/* Suggested chips if provided */}
       {availableSuggestions.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-          <span className="text-[11px] text-gray-400">Suggestions:</span>
+          <span className="text-[11px] font-medium text-[#94A3B8]">Suggestions:</span>
           {availableSuggestions.slice(0, 6).map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => addTag(item)}
-              className="inline-flex items-center gap-1 rounded-md border border-dashed border-gray-200 bg-gray-50/70 px-2 py-0.5 text-[11px] text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition"
+              className="inline-flex items-center gap-1 rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-medium text-[#475569] hover:border-[#2563EB] hover:bg-[#EFF6FF] hover:text-[#2563EB] transition-all"
             >
               <PlusIcon className="h-2.5 w-2.5" />
               <span>{item}</span>

@@ -13,7 +13,7 @@ import {
 import { getOrganizations } from "@/features/organizations/organizations";
 import { useToast } from "@/components/Ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 import RoleGuard from "@/components/dashboard/role-guard";
 import {
   PencilSquareIcon,
@@ -333,7 +333,24 @@ function AdminUsersTable() {
     }
   };
 
-  if (loading) return <Loader />;
+  if (loading) {
+    return (
+      <div className="space-y-6" aria-hidden="true">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <Skeleton variant="line" width="16rem" height="1.75rem" />
+            <Skeleton variant="line" width="22rem" height="0.875rem" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton variant="block" width="8rem" height="2.25rem" rounded="xl" />
+            <Skeleton variant="block" width="7rem" height="2.25rem" rounded="xl" />
+          </div>
+        </div>
+        <Skeleton variant="block" width="100%" height="3rem" rounded="xl" />
+        <Skeleton.Table rows={6} columns={5} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

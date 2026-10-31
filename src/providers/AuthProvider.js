@@ -72,6 +72,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback((userData) => {
     setUser(userData);
+    setLoading(false);
     setUserCookies(userData);
   }, []);
 

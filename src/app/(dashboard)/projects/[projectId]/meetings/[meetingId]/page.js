@@ -14,7 +14,7 @@ import {
   ArrowTopRightOnSquareIcon,
 } from "@heroicons/react/24/outline";
 import { useToast } from "@/components/Ui/Toast";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 import { getMeetingsByProject, updateMeeting } from "@/features/meeting/meeting";
 
 export default function MeetingDetailPage() {
@@ -87,7 +87,22 @@ export default function MeetingDetailPage() {
     }
   }
 
-  if (isLoading) return <Loader />;
+  if (isLoading) {
+    return (
+      <div className="space-y-6" aria-hidden="true">
+        <Skeleton variant="line" width="12rem" height="1rem" />
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 space-y-4">
+          <Skeleton variant="badge" width="5rem" height="1.25rem" />
+          <Skeleton variant="line" width="60%" height="2rem" />
+          <Skeleton variant="line" width="40%" height="1rem" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Skeleton variant="card" height="10rem" />
+          <Skeleton variant="card" height="10rem" />
+        </div>
+      </div>
+    );
+  }
 
   if (!meeting) {
     return (
