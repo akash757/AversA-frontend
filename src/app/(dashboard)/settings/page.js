@@ -14,7 +14,7 @@ import {
   ArrowPathIcon,
   DocumentTextIcon,
 } from "@heroicons/react/24/outline";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 
 const SETTINGS_CARDS = [
   {
@@ -88,7 +88,19 @@ export default function SettingsPage() {
   }, []);
 
   if (loading) {
-    return <Loader />;
+    return (
+      <div className="space-y-6" aria-hidden="true">
+        <div className="space-y-1">
+          <Skeleton variant="line" width="16rem" height="1.75rem" />
+          <Skeleton variant="line" width="22rem" height="0.875rem" />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} variant="card" height="9rem" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const visibleCards = SETTINGS_CARDS.filter(

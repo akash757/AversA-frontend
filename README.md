@@ -2,11 +2,12 @@
 
 Autonomous SDLC Platform - Frontend Web Application built with [Next.js](https://nextjs.org) and Tailwind CSS.
 
+
 ## Getting Started
 
 1. Install dependencies:
 ```bash
-npm install
+npm installl
 ```
 
 2. Configure environment:

@@ -1,10 +1,10 @@
 {
-  "name": "AversA — AI Product Management Platform",
+  "name": "AversA — AI Product & Project Management Agent",
   "short_name": "AversA",
-  "description": "Turn client conversations into shipped products. Autonomous AI product manager that extracts requirements, estimates, and tasks from discovery meetings.",
+  "description": "Autonomous AI Product Management Agent and Project Management Agent for the Software Development Lifecycle (SDLC). Turn client discovery into verified PRDs and sprint tasks.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#07090F",
   "theme_color": "#2563EB",
   "icons": [
     {
@@ -12,7 +12,11 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "32x32",
+      "type": "image/png"
     }
   ]
 }
-

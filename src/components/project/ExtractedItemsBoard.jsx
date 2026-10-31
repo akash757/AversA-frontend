@@ -107,23 +107,23 @@ export default function ExtractedItemsBoard({
     fetchItems();
   }, [fetchItems]);
 
-  // Handle status update (accept / reject / reopen)
+  // Handle status update (accept / reject / reopen) optimistically
   const handleUpdateStatus = async (item, newStatus, replaceAnswer = false) => {
     const itemId = item.id || item._id;
-    setIsUpdating((prev) => ({ ...prev, [itemId]: true }));
+    const previousStatus = item.status;
+
+    // Instant optimistic update
+    setItems((prev) =>
+      prev.map((it) =>
+        (it.id || it._id) === itemId ? { ...it, status: newStatus } : it
+      )
+    );
 
     try {
       await updateExtractedItem(itemId, {
         status: newStatus,
         replaceAnswer,
       });
-
-      // Update state in-place
-      setItems((prev) =>
-        prev.map((it) =>
-          (it.id || it._id) === itemId ? { ...it, status: newStatus } : it
-        )
-      );
 
       toast?.show(
         `Item ${newStatus === "accepted" ? "accepted" : newStatus === "rejected" ? "rejected" : "updated"} successfully.`,
@@ -134,6 +134,13 @@ export default function ExtractedItemsBoard({
         onRefreshProject();
       }
     } catch (err) {
+      // Revert state on failure
+      setItems((prev) =>
+        prev.map((it) =>
+          (it.id || it._id) === itemId ? { ...it, status: previousStatus } : it
+        )
+      );
+
       const status = err?.status || err?.response?.status;
       const message = err?.message || err?.response?.data?.message || "";
 
@@ -147,8 +154,6 @@ export default function ExtractedItemsBoard({
       }
 
       toast?.show(message || "Failed to update item status.", "error");
-    } finally {
-      setIsUpdating((prev) => ({ ...prev, [itemId]: false }));
     }
   };
 

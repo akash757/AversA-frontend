@@ -38,13 +38,13 @@ export default function ModernDateInput({
   return (
     <div className="space-y-1.5">
       {label && (
-        <label htmlFor={inputId} className="block text-xs font-semibold text-gray-700">
+        <label htmlFor={inputId} className="block text-xs font-semibold text-[#0F172A]">
           {label}
         </label>
       )}
 
-      <div className="group relative flex items-center rounded-xl border border-gray-200 bg-white shadow-2xs transition-all focus-within:border-[#2563EB] focus-within:ring-2 focus-within:ring-blue-500/10 hover:border-gray-300">
-        <div className="pointer-events-none pl-3 text-gray-400 group-focus-within:text-[#2563EB] transition-colors">
+      <div className="group relative flex items-center rounded-[12px] border border-[#E2E8F0] bg-white shadow-2xs transition-all focus-within:border-[#2563EB] focus-within:shadow-[0_0_0_3px_#EFF6FF] hover:border-[#CBD5E1]">
+        <div className="pointer-events-none pl-3 text-[#94A3B8] group-focus-within:text-[#2563EB] transition-colors">
           <CalendarDaysIcon className="h-4 w-4" />
         </div>
 
@@ -55,14 +55,14 @@ export default function ModernDateInput({
           min={min}
           max={max}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-transparent py-2 pl-2.5 pr-8 text-xs font-medium text-gray-900 focus:outline-none cursor-pointer"
+          className="w-full bg-transparent py-2 pl-2.5 pr-8 text-xs font-medium text-[#0F172A] focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-50 hover:[&::-webkit-calendar-picker-indicator]:opacity-90"
         />
 
         {value && (
           <button
             type="button"
             onClick={() => onChange("")}
-            className="absolute right-2.5 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition"
+            className="absolute right-2.5 rounded-md p-1 text-[#94A3B8] hover:bg-[#F1F5F9] hover:text-[#0F172A] transition"
             title="Clear date"
           >
             <XMarkIcon className="h-3.5 w-3.5" />
@@ -70,36 +70,37 @@ export default function ModernDateInput({
         )}
       </div>
 
-      {/* Selected date readout or helper text */}
-      <div className="flex items-center justify-between text-[11px] text-gray-500">
+      {/* Selected date readout or helper text & Quick Presets */}
+      <div className="flex items-center justify-between text-[11px] text-[#64748B] pt-0.5 min-h-[20px]">
         {formattedDisplay ? (
-          <span className="font-medium text-blue-600">{formattedDisplay}</span>
+          <span className="font-semibold text-[#2563EB] flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#2563EB]"></span>
+            {formattedDisplay}
+          </span>
         ) : (
-          <span>{helperText || placeholder}</span>
+          <span className="text-[#94A3B8]">{helperText || placeholder}</span>
         )}
 
         {showPresets && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => applyOffsetDays(0)}
-              className="text-[10px] font-medium text-gray-400 hover:text-blue-600 transition"
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#F1F5F9] text-[#475569] hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#BFDBFE] border border-transparent transition"
             >
               Today
             </button>
-            <span className="text-gray-300">•</span>
             <button
               type="button"
               onClick={() => applyOffsetDays(14)}
-              className="text-[10px] font-medium text-gray-400 hover:text-blue-600 transition"
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#F1F5F9] text-[#475569] hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#BFDBFE] border border-transparent transition"
             >
               +2w
             </button>
-            <span className="text-gray-300">•</span>
             <button
               type="button"
               onClick={() => applyOffsetDays(30)}
-              className="text-[10px] font-medium text-gray-400 hover:text-blue-600 transition"
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#F1F5F9] text-[#475569] hover:bg-[#EFF6FF] hover:text-[#2563EB] hover:border-[#BFDBFE] border border-transparent transition"
             >
               +1m
             </button>
