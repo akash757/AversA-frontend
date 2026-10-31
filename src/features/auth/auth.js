@@ -12,17 +12,20 @@
  *   PUT  /api/auth/change-password   (protected)
  */
 
-import api, { setTokens, clearTokens } from "@/lib/api/api";
+import api, { setTokens, clearTokens, SESSION_COOKIE_AGE } from "@/lib/api/api";
 
 function setAuthCookies(data) {
   if (!data) return;
   setTokens(data.accessToken, data.refreshToken);
   if (data.user && typeof document !== "undefined") {
+    const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+    const secureFlag = isSecure ? "; Secure" : "";
+    const cookieAge = SESSION_COOKIE_AGE || 60 * 60 * 24 * 7;
     if (data.user.role) {
-      document.cookie = `userRole=${encodeURIComponent(data.user.role)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
+      document.cookie = `userRole=${encodeURIComponent(data.user.role)}; path=/; max-age=${cookieAge}; samesite=lax${secureFlag}`;
     }
     if (data.user.status) {
-      document.cookie = `userStatus=${encodeURIComponent(data.user.status)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
+      document.cookie = `userStatus=${encodeURIComponent(data.user.status)}; path=/; max-age=${cookieAge}; samesite=lax${secureFlag}`;
     }
   }
 }

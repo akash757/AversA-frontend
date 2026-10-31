@@ -150,6 +150,16 @@ export default function AuthShell({
 
       {/* ── Right form panel ────────────────────── */}
       <div className="flex w-full flex-col lg:w-[54%] xl:w-[56%]">
+        {/* Desktop top header */}
+        <div className="hidden lg:flex items-center justify-end px-8 pt-6">
+          <Link
+            href="/"
+            className="text-xs font-semibold text-gray-500 hover:text-gray-950 transition-colors inline-flex items-center gap-1"
+          >
+            ← Back to Homepage
+          </Link>
+        </div>
+
         {/* Mobile header */}
         <div className="flex items-center justify-between border-b border-[#F1F5F9] px-5 py-4 lg:hidden">
           <Link href="/">

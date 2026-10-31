@@ -8,12 +8,12 @@ export function middleware(request) {
   const role = request.cookies.get("userRole")?.value;
   const status = request.cookies.get("userStatus")?.value;
 
-  // Active session exists if either access token or long-lived refresh token is present
-  const hasSession = !!(accessToken || refreshToken);
+  const isAuthenticated = Boolean(accessToken || refreshToken);
 
-  // 1. If user is logged in and visits homepage (/) or auth pages (/login, /signup),
+  // 1. If user is logged in and visits auth pages (/login, /signup),
   // redirect immediately to dashboard according to their role.
-  if (hasSession && (pathname === "/" || pathname === "/login" || pathname === "/signup")) {
+  // Note: homepage (/) is NOT redirected so users can freely browse the landing page.
+  if (isAuthenticated && (pathname === "/login" || pathname === "/signup")) {
     if (status === "pending") {
       return NextResponse.redirect(new URL("/pending-approval", request.url));
     }
@@ -32,7 +32,7 @@ export function middleware(request) {
   ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 
   if (isProtectedRoute) {
-    if (!hasSession) {
+    if (!isAuthenticated) {
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("next", pathname);
       return NextResponse.redirect(loginUrl);
@@ -52,7 +52,6 @@ export function middleware(request) {
 
 export const config = {
   matcher: [
-    "/",
     "/login",
     "/signup",
     "/dashboard/:path*",
