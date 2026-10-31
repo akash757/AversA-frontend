@@ -212,22 +212,28 @@ Requirement Baselines freeze agreed requirements, decisions, and answered questi
     }
   }
   ```
-- **`GET /api/projects/:id/baselines`**: Lists all baseline versions for a project sorted by version descending with item counts.
-- **`GET /api/baselines/:id`**: Retrieves a single baseline by ID with its ordered items.
+- **`GET /api/projects/:id/baselines`**: Lists all baseline versions for a project sorted by version descending with item counts per type. Delivery roles see confirmed/superseded versions only with reduced view.
+- **`GET /api/projects/:id/baselines/latest`**: Retrieves the current confirmed requirement baseline with its items in sortOrder. Returns 404 with "No confirmed baseline yet" if none exists.
+- **`GET /api/baselines/:id`**: Retrieves a single baseline by ID with its ordered items. Delivery roles receive a reduced view (no internal notes, no creator, no source pointers), and draft queries return 404 to hide draft existence.
 - **`POST /api/baselines/:id/items`**: Adds a manual item (decision, requirement, or answer) with auto-assigned sortOrder.
 - **`PATCH /api/baselines/:id/items/:itemId`**: Edits text, questionText (answer items only), or topicKey of an existing baseline item in a draft without touching source items.
 - **`DELETE /api/baselines/:id/items/:itemId`**: Removes an item line from the draft baseline snapshot only ("Removed from this draft only.").
 - **`PATCH /api/baselines/:id`**: Updates the draft baseline's note (up to 2,000 chars, null to clear).
+- **`POST /api/baselines/:id/confirm`**: Freezes a draft baseline snapshot into `confirmed` status, supersedes any previously confirmed version, advances project stage to `requirements_confirmed` (if in `day_one` or `discovery`), and blocks with 409 if transcript analysis is running or if readiness warnings exist without `acknowledgeWarnings: true`. Restricted to `product_manager`, `admin`, and `superadmin`.
+- **`DELETE /api/baselines/:id`**: Discards a draft baseline and all its items permanently ("Draft baseline discarded. Manual edits to this draft have been removed."). Restricted to Managers.
 
 ### Pending Frontend Implementation Steps
 - [ ] **7.1. Add Baseline API Client in `frontend/src/features/baseline/baseline.js`**:
   - Implement `createDraftBaseline(projectId, { note })`
   - Implement `getProjectBaselines(projectId)`
+  - Implement `getLatestConfirmedBaseline(projectId)`
   - Implement `getBaselineById(baselineId)`
   - Implement `addBaselineItem(baselineId, { type, text, questionText, topicKey })`
   - Implement `updateBaselineItem(baselineId, itemId, { text, questionText, topicKey })`
   - Implement `deleteBaselineItem(baselineId, itemId)`
   - Implement `updateBaselineNote(baselineId, { note })`
+  - Implement `confirmBaseline(baselineId, { acknowledgeWarnings })`
+  - Implement `discardDraftBaseline(baselineId)`
 - [ ] **7.2. Build Baseline Overview Card & Version Drawer**:
   - Show baseline status on project overview (`Draft vX in progress`, `Confirmed vX`, or `No baseline created yet`).
   - "Build Baseline Draft" action button with confirmation modal displaying readiness stats (open questions, proposed items, suggested follow-ups).
@@ -236,10 +242,20 @@ Requirement Baselines freeze agreed requirements, decisions, and answered questi
   - Table/list rendering ordered baseline items:
     - Answer items (question text and confirmed answer with topic badge).
     - Requirements & Decisions (with sortOrder and source pointers).
+  - Delivery Role View (Developer, Designer, QA, DevOps):
+    - Read-only presentation: Hides note section, creator, source IDs, and draft modification actions.
   - When viewing a `draft` baseline (for Managers):
     - Inline or modal edit button to modify item text, question text, or topic badge.
     - Delete item button with confirmation notice: *"This removes the item from this draft only. Source extracted item remains accepted."*
     - "+ Add Manual Item" button modal: type selector (`requirement`, `decision`, `answer`), text, questionText (if answer), and topicKey selector.
     - Editable baseline note section with save / clear button.
-
-
+    - "Discard Draft" button with confirmation alert that manual edits will be permanently wiped.
+- [ ] **7.4. Build Baseline Freeze & Confirmation Modal**:
+  - Available to `product_manager`, `admin`, and `superadmin` when viewing a `draft` baseline with at least 1 item.
+  - Pre-flight check: If readiness numbers (open questions, proposed items, suggested follow-ups, or changes since draft) are $> 0$, display a warning checklist modal:
+    - Open questions still pending or asked
+    - Extracted items still proposed
+    - Follow-up questions still suggested
+    - Changes since draft creation (accepted items / answered questions after draft createdAt)
+    - Checkbox: *"I understand these items remain unresolved and wish to confirm this requirement baseline anyway."* (`acknowledgeWarnings: true`).
+  - Upon confirmation: Updates project stage indicator to `Requirements Confirmed` and switches baseline view to immutable confirmed view.
