@@ -9,7 +9,7 @@ import {
 } from "@/features/organizations/organizations";
 import { getAllUsers } from "@/features/admin/admin";
 import { useToast } from "@/components/Ui/Toast";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 import RoleGuard from "@/components/dashboard/role-guard";
 import {
   PencilSquareIcon,
@@ -201,7 +201,24 @@ function OrganizationsPanel() {
     }
   };
 
-  if (loading) return <Loader />;
+  if (loading) {
+    return (
+      <div className="space-y-6" aria-hidden="true">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <Skeleton variant="line" width="14rem" height="1.75rem" />
+            <Skeleton variant="line" width="20rem" height="0.875rem" />
+          </div>
+          <Skeleton variant="block" width="9rem" height="2.25rem" rounded="xl" />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} variant="card" height="11rem" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

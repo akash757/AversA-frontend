@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 import { useToast } from "@/components/Ui/Toast";
 import MeetingCard from "@/components/meetings/MeetingCard";
 import GoogleCalendarConnect from "@/components/meetings/GoogleCalendarConnect";
@@ -169,8 +169,6 @@ export default function MeetingsPage() {
     return pId === selectedProjectId;
   });
 
-  if (isLoading) return <Loader />;
-
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -237,7 +235,11 @@ export default function MeetingsPage() {
 
       {/* Meetings List */}
       <div className="space-y-3">
-        {filteredMeetings.length === 0 ? (
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton.MeetingCard key={i} />
+          ))
+        ) : filteredMeetings.length === 0 ? (
           <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-xs">
             <CalendarDaysIcon className="mx-auto h-12 w-12 text-gray-300 stroke-1" />
             <h3 className="mt-3 text-sm font-bold text-gray-900">No meetings found</h3>

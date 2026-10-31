@@ -13,17 +13,26 @@ import { XMarkIcon } from "@heroicons/react/24/outline";
  * @param {function} onClose
  * @param {"sm"|"md"|"lg"|"xl"|"full"} size
  * @param {string}   title
+ * @param {string}   subtitle
+ * @param {React.ReactNode} icon
+ * @param {React.ReactNode} header
  * @param {boolean}  hideCloseButton
  * @param {boolean}  closeOnBackdrop  (default: true)
+ * @param {string}   className
+ * @param {string}   bodyClassName
  */
 export default function Modal({
   isOpen,
   onClose,
   size = "md",
   title,
+  subtitle,
+  icon,
+  header,
   hideCloseButton = false,
   closeOnBackdrop = true,
   className = "",
+  bodyClassName = "px-6 py-5",
   children,
 }) {
   const dialogRef = useRef(null);
@@ -96,13 +105,27 @@ export default function Modal({
           .join(" ")}
       >
         {/* Header */}
-        {(title || !hideCloseButton) && (
+        {header ? (
+          header
+        ) : (title || !hideCloseButton) ? (
           <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-[#F1F5F9]">
-            {title && (
-              <h2 className="text-base font-bold text-[#0F172A] leading-tight font-display">
-                {title}
-              </h2>
-            )}
+            <div className="flex items-start gap-3">
+              {icon && (
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#2563EB] border border-blue-100/80 shadow-xs">
+                  {icon}
+                </div>
+              )}
+              <div>
+                {title && (
+                  <h2 className="text-base font-bold text-[#0F172A] leading-tight font-display">
+                    {title}
+                  </h2>
+                )}
+                {subtitle && (
+                  <p className="mt-1 text-xs text-[#64748B]">{subtitle}</p>
+                )}
+              </div>
+            </div>
             {!hideCloseButton && (
               <button
                 type="button"
@@ -114,10 +137,10 @@ export default function Modal({
               </button>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Body */}
-        <div className="px-6 py-5">{children}</div>
+        <div className={bodyClassName}>{children}</div>
       </div>
     </div>
   );

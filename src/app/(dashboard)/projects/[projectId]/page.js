@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/Ui/Toast";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 import ProjectHeader from "@/components/project/ProjectHeader";
 import MeetingCard from "@/components/meetings/MeetingCard";
 import GoogleCalendarConnect from "@/components/meetings/GoogleCalendarConnect";
@@ -173,19 +173,10 @@ export default function ProjectWorkspacePage() {
   const loadData = useCallback(async (id) => {
     setIsLoading(true);
     try {
-      const [projRes, questRes, meetRes, contactRes, transRes, partRes] = await Promise.all([
-        getProjectById(id),
-        getProjectQuestions(id),
-        getMeetingsByProject(id),
-        getProjectContacts(id),
-        getProjectTranscripts(id).catch(() => null),
-        getProjectParticipants(id).catch(() => null),
-      ]);
-
-      if (projRes?.success) {
-        const p = projRes.data?.project || null;
-        setProject(p);
-        if (p) {
+      const projPromise = getProjectById(id).then((res) => {
+        if (res?.success && res.data?.project) {
+          const p = res.data.project;
+          setProject(p);
           setSuggestionStatus(p.suggestionStatus || "none");
           setBriefTooThin(Boolean(p.briefTooThin));
           setEditProjectForm({
@@ -197,7 +188,19 @@ export default function ProjectWorkspacePage() {
             techStack: Array.isArray(p.techStack) ? p.techStack.join(", ") : "",
           });
         }
-      } else {
+        return res;
+      });
+
+      const [projRes, questRes, meetRes, contactRes, transRes, partRes] = await Promise.all([
+        projPromise,
+        getProjectQuestions(id),
+        getMeetingsByProject(id),
+        getProjectContacts(id),
+        getProjectTranscripts(id).catch(() => null),
+        getProjectParticipants(id).catch(() => null),
+      ]);
+
+      if (!projRes?.success) {
         toastRef.current?.error(projRes?.message || "Failed to load project details.");
       }
 
@@ -812,7 +815,7 @@ export default function ProjectWorkspacePage() {
       });
   }, [topics, questionStatusFilter, selectedTopicFilter, questionSearchQuery]);
 
-  if (isLoading && !project) return <Loader />;
+  if (isLoading && !project) return <Skeleton.ProjectDetail />;
 
   return (
     <div className="space-y-6">

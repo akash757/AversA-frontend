@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import CreateProjectModal from "@/components/project/CreateProjectModal";
 import { useToast } from "@/components/Ui/Toast";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 import PageHeader from "@/components/Ui/PageHeader";
 import Button from "@/components/Ui/Button";
 import EmptyState from "@/components/Ui/EmptyState";
@@ -148,8 +148,10 @@ function ProjectsContent() {
 
       {/* Grid of Projects */}
       {isLoading ? (
-        <div className="flex h-64 items-center justify-center">
-          <Loader />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton.ProjectCard key={i} />
+          ))}
         </div>
       ) : loadError ? (
         <EmptyState
@@ -210,7 +212,18 @@ function ProjectsContent() {
 
 export default function ProjectsPage() {
   return (
-    <Suspense fallback={<Loader />}>
+    <Suspense
+      fallback={
+        <div className="space-y-6 animate-fade-in" aria-hidden="true">
+          <Skeleton variant="block" height="5rem" rounded="xl" />
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton.ProjectCard key={i} />
+            ))}
+          </div>
+        </div>
+      }
+    >
       <ProjectsContent />
     </Suspense>
   );

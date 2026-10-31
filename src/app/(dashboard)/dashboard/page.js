@@ -9,7 +9,7 @@ import { getAllUsers } from "@/features/admin/admin";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import MeetingCard from "@/components/meetings/MeetingCard";
 import CreateProjectModal from "@/components/project/CreateProjectModal";
-import Loader from "@/components/Ui/Loader";
+import Skeleton from "@/components/Ui/Skeleton";
 import Button from "@/components/Ui/Button";
 import Card from "@/components/Ui/Card";
 import Badge from "@/components/Ui/Badge";
@@ -69,7 +69,7 @@ export default function DashboardPage() {
     return "Good evening";
   }, []);
 
-  if (isLoading) return <Loader />;
+  if (isLoading) return <Skeleton.Dashboard />;
 
   const now = new Date();
   const upcomingMeetings = meetings
