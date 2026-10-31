@@ -187,7 +187,7 @@ async function request(endpoint, options = {}) {
 }
 
 // Silent token refresh
-async function silentRefresh() {
+export async function silentRefresh() {
   try {
     const refreshToken = getRefreshToken();
     if (!refreshToken) return false;
@@ -209,6 +209,47 @@ async function silentRefresh() {
   } catch {
     return false;
   }
+}
+
+/**
+ * Checks if a JWT access token is expired or close to expiration (30s buffer).
+ */
+export function isTokenExpired(token) {
+  if (!token || typeof token !== "string") return true;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return true;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonStr =
+      typeof window !== "undefined"
+        ? decodeURIComponent(
+            atob(base64)
+              .split("")
+              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+              .join("")
+          )
+        : Buffer.from(base64, "base64").toString("utf-8");
+    const payload = JSON.parse(jsonStr);
+    if (!payload.exp) return false;
+    // Buffer by 30 seconds
+    return Date.now() >= payload.exp * 1000 - 30000;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Retrieves a guaranteed fresh, unexpired access token, refreshing silently if needed.
+ */
+export async function getValidAccessToken() {
+  let token = getAccessToken();
+  if (isTokenExpired(token)) {
+    const refreshed = await silentRefresh();
+    if (refreshed) {
+      token = getAccessToken();
+    }
+  }
+  return token;
 }
 
 // Convenience methods

@@ -31,7 +31,7 @@ import {
   deleteMeeting,
 } from "@/features/meeting/meeting";
 import { getProjectTranscripts } from "@/features/transcript/transcript";
-import { getAccessToken, BASE_URL } from "@/lib/api/api";
+import { getValidAccessToken, silentRefresh, getAccessToken, BASE_URL } from "@/lib/api/api";
 import {
   QuestionMarkCircleIcon,
   CalendarDaysIcon,
@@ -268,19 +268,15 @@ export default function ProjectWorkspacePage() {
   useEffect(() => {
     if (!projectId) return;
 
-    const token = getAccessToken();
-    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : "";
-    const sseUrl = `${BASE_URL}/projects/${projectId}/events${tokenQuery}`;
+    let eventSource = null;
+    let isCancelled = false;
 
-    let eventSource;
-    try {
-      eventSource = new EventSource(sseUrl, { withCredentials: true });
-
-      eventSource.addEventListener("suggestions.running", () => {
+    function attachListeners(es) {
+      es.addEventListener("suggestions.running", () => {
         setSuggestionStatus("running");
       });
 
-      eventSource.addEventListener("suggestions.ready", (event) => {
+      es.addEventListener("suggestions.ready", (event) => {
         try {
           const data = JSON.parse(event.data);
           setSuggestionStatus("ready");
@@ -296,7 +292,7 @@ export default function ProjectWorkspacePage() {
         }
       });
 
-      eventSource.addEventListener("suggestions.failed", (event) => {
+      es.addEventListener("suggestions.failed", (event) => {
         try {
           const data = JSON.parse(event.data);
           setSuggestionStatus("failed");
@@ -306,14 +302,49 @@ export default function ProjectWorkspacePage() {
         }
       });
 
-      eventSource.onerror = () => {
-        // Native EventSource auto-reconnects on temporary network drops
+      es.onerror = async () => {
+        // When connection is rejected (e.g. 401 token expiry) or dropped, close broken socket
+        if (es.readyState === EventSource.CLOSED) {
+          es.close();
+          if (isCancelled) return;
+
+          // Attempt a silent token refresh and re-open with the fresh token
+          const refreshed = await silentRefresh();
+          if (refreshed && !isCancelled) {
+            const freshToken = getAccessToken();
+            if (freshToken) {
+              const retryUrl = `${BASE_URL}/projects/${projectId}/events?token=${encodeURIComponent(freshToken)}`;
+              try {
+                eventSource = new EventSource(retryUrl, { withCredentials: true });
+                attachListeners(eventSource);
+              } catch {
+                // Graceful fallback
+              }
+            }
+          }
+        }
       };
-    } catch {
-      // Graceful fallback if EventSource unavailable
     }
 
+    async function initSSE() {
+      // 1. Ensure a valid, non-expired JWT access token before connecting
+      const token = await getValidAccessToken();
+      if (isCancelled || !token) return;
+
+      const sseUrl = `${BASE_URL}/projects/${projectId}/events?token=${encodeURIComponent(token)}`;
+
+      try {
+        eventSource = new EventSource(sseUrl, { withCredentials: true });
+        attachListeners(eventSource);
+      } catch {
+        // Graceful fallback if EventSource unavailable
+      }
+    }
+
+    void initSSE();
+
     return () => {
+      isCancelled = true;
       if (eventSource) {
         eventSource.close();
       }
