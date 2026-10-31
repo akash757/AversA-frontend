@@ -5,19 +5,20 @@ import {
   SparklesIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
-  FunnelIcon,
   PlusIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   LightBulbIcon,
-  InformationCircleIcon,
-  ArrowPathIcon,
   QuestionMarkCircleIcon,
-  ChatBubbleBottomCenterTextIcon,
+  PencilSquareIcon,
   ClockIcon,
-  ShieldExclamationIcon,
+  CheckCircleIcon,
+  MinusCircleIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
 } from "@heroicons/react/24/outline";
+import { CheckCircleIcon as CheckCircleSolidIcon } from "@heroicons/react/24/solid";
 import Badge from "@/components/Ui/Badge";
 import Button from "@/components/Ui/Button";
 import Card from "@/components/Ui/Card";
@@ -38,36 +39,50 @@ export default function DiscoveryQuestionsBoard({
   const [selectedTopicFilter, setSelectedTopicFilter] = useState("all");
   const [questionStatusFilter, setQuestionStatusFilter] = useState("all");
 
-  // Track expanded question cards for meeting preparation tips & context
-  const [expandedQuestionIds, setExpandedQuestionIds] = useState({});
-  const [collapsedTopics, setCollapsedTopics] = useState({});
+  // Track expanded topics: by default EMPTY ({}), meaning ALL TOPICS ARE CLOSED BY DEFAULT
+  const [expandedTopicKeys, setExpandedTopicKeys] = useState({});
 
-  const toggleQuestionExpanded = (qId) => {
-    setExpandedQuestionIds((prev) => ({
-      ...prev,
-      [qId]: !prev[qId],
-    }));
-  };
+  // Question detail tips expanded state
+  const [expandedTips, setExpandedTips] = useState({});
 
-  const toggleTopicCollapsed = (topicKey) => {
-    setCollapsedTopics((prev) => ({
+  // Active status dropdown menu for a specific question ID
+  const [openStatusMenuId, setOpenStatusMenuId] = useState(null);
+
+  // Quick Inline Answer Note Modal State
+  const [activeAnswerQuestion, setActiveAnswerQuestion] = useState(null);
+  const [answerInputText, setAnswerInputText] = useState("");
+  const [isSavingAnswer, setIsSavingAnswer] = useState(false);
+
+  // Toggle individual topic
+  const toggleTopicExpand = (topicKey) => {
+    setExpandedTopicKeys((prev) => ({
       ...prev,
       [topicKey]: !prev[topicKey],
     }));
   };
 
-  // Helper for optimistic state updates (background API call)
-  const applyOptimisticUpdate = useCallback(
-    (questionId, patchPayload, successMsg = "") => {
-      // 1. Keep snapshot for rollback
+  // Toggle tips
+  const toggleTipExpanded = (qId) => {
+    setExpandedTips((prev) => ({
+      ...prev,
+      [qId]: !prev[qId],
+    }));
+  };
+
+  // Optimistic status update with automatic state revert on failure
+  const applyOptimisticStatus = useCallback(
+    (questionId, targetStatus, successMsg = "") => {
       let previousTopics;
       setTopics((prev) => {
         previousTopics = prev;
         return prev.map((topic) => ({
           ...topic,
-          questions: (topic.questions || []).map((q) =>
-            (q.id === questionId || q._id === questionId) ? { ...q, ...patchPayload } : q
-          ),
+          questions: (topic.questions || []).map((q) => {
+            if (q.id === questionId || q._id === questionId) {
+              return { ...q, status: targetStatus };
+            }
+            return q;
+          }),
         }));
       });
 
@@ -75,54 +90,79 @@ export default function DiscoveryQuestionsBoard({
         toast?.success?.(successMsg);
       }
 
-      // 2. Fire API in background without blocking UI
-      updateProjectQuestion(questionId, patchPayload, projectId)
+      setOpenStatusMenuId(null);
+
+      updateProjectQuestion(questionId, { status: targetStatus }, projectId)
         .then((res) => {
           if (!res?.success) {
-            // Revert state
             setTopics(previousTopics);
-            toast?.error?.(res?.message || "Could not update question");
+            toast?.error?.(res?.message || "Could not update status.");
           }
         })
         .catch((err) => {
-          // Revert state
           setTopics(previousTopics);
-          toast?.error?.(err?.message || "Failed to update question. Restored original state.");
+          toast?.error?.(err?.message || "Failed to update status. Restored previous state.");
         });
     },
     [projectId, setTopics, toast]
   );
 
-  // Optimistic Quick Actions
-  const handleAcceptSuggestion = (qId) => {
-    applyOptimisticUpdate(qId, { status: "pending" }, "Added question to discovery backlog");
+  // Quick 1-click Toggle: cycles To Discuss -> In Meeting -> Confirmed -> To Discuss
+  const handleQuickCycleStatus = (question) => {
+    const qId = question.id || question._id;
+    if (question.status === "answered") {
+      applyOptimisticStatus(qId, "pending", "Reopened question (To Discuss)");
+    } else if (question.status === "asked") {
+      setActiveAnswerQuestion(question);
+      setAnswerInputText(question.answerText || "");
+    } else {
+      applyOptimisticStatus(qId, "asked", "Marked as In Discussion");
+    }
   };
 
-  const handleDismissSuggestion = (qId) => {
-    applyOptimisticUpdate(qId, { status: "skipped" }, "Suggestion dismissed");
+  // Submit Answer Note & Confirm
+  const handleSaveAnswerNote = async (e) => {
+    e.preventDefault();
+    if (!activeAnswerQuestion) return;
+
+    const qId = activeAnswerQuestion.id || activeAnswerQuestion._id;
+    const text = answerInputText.trim();
+
+    setIsSavingAnswer(true);
+    try {
+      if (activeAnswerQuestion.status === "pending") {
+        await updateProjectQuestion(qId, { status: "asked" }, projectId);
+      }
+
+      const patchPayload = {
+        status: "answered",
+        answerText: text || "Confirmed during discovery alignment",
+      };
+
+      const res = await updateProjectQuestion(qId, patchPayload, projectId);
+      if (res?.success) {
+        toast?.success?.("Requirement confirmed with answer notes!");
+        setTopics((prev) =>
+          prev.map((topic) => ({
+            ...topic,
+            questions: (topic.questions || []).map((q) =>
+              (q.id === qId || q._id === qId) ? { ...q, ...patchPayload } : q
+            ),
+          }))
+        );
+        setActiveAnswerQuestion(null);
+        setAnswerInputText("");
+      } else {
+        toast?.error?.(res?.message || "Failed to save answer.");
+      }
+    } catch {
+      toast?.error?.("Failed to save answer.");
+    } finally {
+      setIsSavingAnswer(false);
+    }
   };
 
-  const handleMarkAsked = (qId) => {
-    applyOptimisticUpdate(qId, { status: "asked" }, "Marked as In Discussion");
-  };
-
-  const handleMarkAnswered = (qId) => {
-    applyOptimisticUpdate(qId, { status: "answered" }, "Marked as Confirmed & Answered");
-  };
-
-  const handleSkipQuestion = (qId) => {
-    applyOptimisticUpdate(qId, { status: "skipped" }, "Question skipped");
-  };
-
-  const handleRestoreQuestion = (qId) => {
-    applyOptimisticUpdate(qId, { status: "pending" }, "Question restored to backlog");
-  };
-
-  const handleReopenQuestion = (qId) => {
-    applyOptimisticUpdate(qId, { status: "asked" }, "Question reopened for review");
-  };
-
-  // Calculate live dynamic metrics from current topics state
+  // Metrics across all questions
   const { allQuestions, stats } = useMemo(() => {
     const list = topics.flatMap((t) => t.questions || []);
     const total = list.length;
@@ -160,8 +200,9 @@ export default function DiscoveryQuestionsBoard({
             const query = questionSearchQuery.toLowerCase();
             const textMatch = q.text?.toLowerCase().includes(query);
             const reasonMatch = q.reason?.toLowerCase().includes(query);
+            const answerMatch = q.answerText?.toLowerCase().includes(query);
             const topicMatch = t.title?.toLowerCase().includes(query);
-            if (!textMatch && !reasonMatch && !topicMatch) return false;
+            if (!textMatch && !reasonMatch && !answerMatch && !topicMatch) return false;
           }
           return true;
         });
@@ -181,192 +222,214 @@ export default function DiscoveryQuestionsBoard({
       });
   }, [topics, questionStatusFilter, selectedTopicFilter, questionSearchQuery]);
 
+  // Are all topics open?
+  const areAllTopicsOpen = useMemo(() => {
+    if (filteredTopics.length === 0) return false;
+    return filteredTopics.every((t) => Boolean(expandedTopicKeys[t.id || t._id || t.key]));
+  }, [filteredTopics, expandedTopicKeys]);
+
+  // Toggle All Topics (Open All / Close All)
+  const handleToggleAllTopics = () => {
+    if (areAllTopicsOpen) {
+      // Close all
+      setExpandedTopicKeys({});
+    } else {
+      // Open all
+      const allOpen = {};
+      filteredTopics.forEach((t) => {
+        const key = t.id || t._id || t.key;
+        if (key) allOpen[key] = true;
+      });
+      setExpandedTopicKeys(allOpen);
+    }
+  };
+
   return (
-    <div className="space-y-5 animate-fade-in">
-      {/* ── AI Suggestion Notice ─────────────────────────── */}
+    <div className="space-y-4">
+      {/* ── AI Suggestions Banner (Only if pending suggestions exist) ────── */}
       {suggestionStatus === "ready" && stats.suggested > 0 && (
-        <div className="rounded-2xl border border-purple-200 bg-gradient-to-r from-purple-50/80 via-indigo-50/60 to-purple-50/80 p-4 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white shadow-xs">
-                <SparklesIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-purple-950 font-display">
-                  AI Generated {stats.suggested} Tailored Discovery Questions
-                </h4>
-                <p className="text-[11px] text-purple-800 mt-0.5">
-                  Review these proposed discovery questions. Click &ldquo;Add to Backlog&rdquo; or &ldquo;Dismiss&rdquo; below with instant background sync.
-                </p>
-              </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-purple-200 bg-purple-50/70 p-3.5 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white shadow-xs">
+              <SparklesIcon className="h-4 w-4" />
             </div>
-            <button
-              type="button"
-              onClick={() => setQuestionStatusFilter("suggested")}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 transition shadow-xs shrink-0 self-start sm:self-auto"
-            >
-              <span>View Suggestions ({stats.suggested})</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Metrics & Progress Header ───────────────────── */}
-      <Card variant="default" className="p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-[#0F172A] font-display">
-                Discovery Matrix Alignment
-              </h3>
-              <Badge variant="brand" size="sm">
-                {stats.answered} / {stats.total} Answered
-              </Badge>
+            <div>
+              <p className="text-xs font-bold text-purple-950 font-display">
+                {stats.suggested} AI Discovery Recommendations
+              </p>
+              <p className="text-[11px] text-purple-800">
+                Tailored questions generated from your project brief ready for review.
+              </p>
             </div>
-            <p className="text-xs text-[#64748B] mt-1">
-              Guiding questions to align scope with client stakeholders before and during meetings.
-            </p>
           </div>
-
-          <div className="w-full sm:w-60">
-            <ProgressBar
-              value={stats.progress}
-              color="brand"
-              size="md"
-              showLabel
-              label="Coverage Rate"
-            />
-          </div>
-        </div>
-
-        {/* Quick Filter Count Chips */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-4 mt-4 border-t border-[#F1F5F9]">
-          <button
-            type="button"
-            onClick={() => setQuestionStatusFilter("all")}
-            className={[
-              "rounded-xl p-2.5 text-center border transition-all text-left",
-              questionStatusFilter === "all"
-                ? "bg-[#0F172A] text-white border-[#0F172A] shadow-xs"
-                : "bg-[#F8FAFC] border-[#E2E8F0] hover:bg-white text-gray-800",
-            ].join(" ")}
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-70 block">All Questions</span>
-            <p className="text-base font-extrabold mt-0.5">{stats.total}</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setQuestionStatusFilter("pending")}
-            className={[
-              "rounded-xl p-2.5 text-center border transition-all text-left",
-              questionStatusFilter === "pending"
-                ? "bg-[#2563EB] text-white border-[#2563EB] shadow-xs"
-                : "bg-blue-50/60 border-blue-100 hover:bg-blue-50 text-blue-900",
-            ].join(" ")}
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-70 block">Backlog (Pending)</span>
-            <p className="text-base font-extrabold mt-0.5">{stats.pending}</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setQuestionStatusFilter("asked")}
-            className={[
-              "rounded-xl p-2.5 text-center border transition-all text-left",
-              questionStatusFilter === "asked"
-                ? "bg-[#D97706] text-white border-[#D97706] shadow-xs"
-                : "bg-amber-50/60 border-amber-100 hover:bg-amber-50 text-amber-900",
-            ].join(" ")}
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-70 block">In Meeting (Asked)</span>
-            <p className="text-base font-extrabold mt-0.5">{stats.asked}</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setQuestionStatusFilter("answered")}
-            className={[
-              "rounded-xl p-2.5 text-center border transition-all text-left",
-              questionStatusFilter === "answered"
-                ? "bg-[#059669] text-white border-[#059669] shadow-xs"
-                : "bg-emerald-50/60 border-emerald-100 hover:bg-emerald-50 text-emerald-900",
-            ].join(" ")}
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-70 block">Answered & Confirmed</span>
-            <p className="text-base font-extrabold mt-0.5">{stats.answered}</p>
-          </button>
 
           <button
             type="button"
             onClick={() => setQuestionStatusFilter("suggested")}
-            className={[
-              "rounded-xl p-2.5 text-center border transition-all text-left col-span-2 sm:col-span-1",
-              questionStatusFilter === "suggested"
-                ? "bg-[#7C3AED] text-white border-[#7C3AED] shadow-xs"
-                : "bg-purple-50/60 border-purple-100 hover:bg-purple-50 text-purple-900",
-            ].join(" ")}
+            className="rounded-xl bg-purple-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 transition shadow-xs cursor-pointer self-start sm:self-auto"
           >
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-70 block">AI Suggestions</span>
-            <p className="text-base font-extrabold mt-0.5">{stats.suggested}</p>
+            Review Suggestions ({stats.suggested})
           </button>
         </div>
-      </Card>
+      )}
 
-      {/* ── Toolbar: Search & Filter ─────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E2E8F0] shadow-xs">
-        <div className="relative flex-1">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#94A3B8]" />
-          <input
-            type="text"
-            value={questionSearchQuery}
-            onChange={(e) => setQuestionSearchQuery(e.target.value)}
-            placeholder="Search questions or guidance notes (e.g., API, budget, security)…"
-            className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] pl-9 pr-8 py-2 text-xs text-[#0F172A] placeholder:text-[#94A3B8] focus:bg-white focus:border-[#2563EB] focus:outline-none transition shadow-2xs"
-          />
-          {questionSearchQuery && (
-            <button
-              type="button"
-              onClick={() => setQuestionSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+      {/* ── Discovery Control Strip (High-Clarity, Zero Overlap) ─────────── */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs p-4 space-y-3.5">
+        {/* Tier 1: Title, Coverage Metric, Global Expand/Collapse Toggle & Add Question */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#F1F5F9] pb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-[#0F172A] font-display">
+                  Discovery Checklist
+                </h3>
+                <span className="rounded-full bg-blue-50 border border-blue-200/80 text-[#2563EB] text-[11px] font-bold px-2 py-0.5">
+                  {stats.answered} / {stats.total} Confirmed
+                </span>
+              </div>
+              <p className="text-xs text-[#64748B] mt-0.5">
+                Technical, operational, and delivery questions to validate with stakeholders.
+              </p>
+            </div>
+          </div>
+
+          {/* Right Action Controls: Expand/Collapse All + Add Question */}
+          <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
+            {/* Live Progress Bar */}
+            <div className="hidden lg:flex items-center gap-2 text-xs font-bold text-[#0F172A] mr-2">
+              <span>{stats.progress}%</span>
+              <div className="w-24">
+                <ProgressBar value={stats.progress} color="brand" size="sm" />
+              </div>
+            </div>
+
+            {/* Toggle All Topics (Open All / Close All) */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleAllTopics}
+              leftIcon={
+                areAllTopicsOpen ? (
+                  <ArrowsPointingInIcon className="h-4 w-4 text-[#2563EB]" />
+                ) : (
+                  <ArrowsPointingOutIcon className="h-4 w-4 text-[#2563EB]" />
+                )
+              }
+              title={
+                areAllTopicsOpen
+                  ? "Collapse all question categories"
+                  : "Expand all question categories"
+              }
             >
-              <XMarkIcon className="h-4 w-4" />
-            </button>
-          )}
+              {areAllTopicsOpen ? "Close All" : "Open All"}
+            </Button>
+
+            {/* Add Question Button */}
+            {onAddQuestionClick && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={onAddQuestionClick}
+                leftIcon={<PlusIcon className="h-4 w-4" />}
+              >
+                Add Question
+              </Button>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedTopicFilter}
-            onChange={(e) => setSelectedTopicFilter(e.target.value)}
-            className="rounded-xl border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-semibold text-[#0F172A] focus:border-[#2563EB] focus:outline-none shadow-2xs"
-          >
-            <option value="all">All Topics ({topics.length})</option>
-            {topics.map((t) => (
-              <option key={t.id || t._id || t.key} value={t.id || t._id || t.key}>
-                {t.title}
-              </option>
-            ))}
-          </select>
+        {/* Tier 2: Status Filter Tabs (Dedicated Row: Never Overlaps!) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {[
+            { key: "all", label: "All Questions", count: stats.total },
+            { key: "pending", label: "To Discuss", count: stats.pending },
+            { key: "asked", label: "In Meeting", count: stats.asked },
+            { key: "answered", label: "Confirmed", count: stats.answered },
+            ...(stats.suggested > 0
+              ? [{ key: "suggested", label: "AI Suggested", count: stats.suggested }]
+              : []),
+            ...(stats.skipped > 0
+              ? [{ key: "skipped", label: "Skipped", count: stats.skipped }]
+              : []),
+          ].map((tab) => {
+            const isActive = questionStatusFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setQuestionStatusFilter(tab.key)}
+                className={[
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer select-none shrink-0",
+                  isActive
+                    ? "bg-[#0F172A] text-white shadow-xs"
+                    : "bg-[#F8FAFC] text-[#475569] border border-[#E2E8F0] hover:bg-white hover:text-[#0F172A]",
+                ].join(" ")}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={[
+                    "rounded-full px-1.5 py-0.2 text-[10px] font-bold",
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-[#E2E8F0] text-[#475569]",
+                  ].join(" ")}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onAddQuestionClick}
-            leftIcon={<PlusIcon className="h-3.5 w-3.5" />}
-          >
-            Add Question
-          </Button>
+        {/* Tier 3: Search Input & Category Filter Dropdown */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-[#F1F5F9]">
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#94A3B8]" />
+            <input
+              type="text"
+              value={questionSearchQuery}
+              onChange={(e) => setQuestionSearchQuery(e.target.value)}
+              placeholder="Search questions or criteria..."
+              className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] pl-8 pr-7 py-2 text-xs text-[#0F172A] placeholder:text-[#94A3B8] focus:bg-white focus:border-[#2563EB] focus:outline-none transition shadow-2xs"
+            />
+            {questionSearchQuery && (
+              <button
+                type="button"
+                onClick={() => setQuestionSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-semibold text-[#64748B] hidden sm:inline">
+              Category:
+            </span>
+            <select
+              value={selectedTopicFilter}
+              onChange={(e) => setSelectedTopicFilter(e.target.value)}
+              className="rounded-xl border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-semibold text-[#0F172A] focus:border-[#2563EB] focus:outline-none shadow-2xs"
+            >
+              <option value="all">All Categories ({topics.length})</option>
+              {topics.map((t) => (
+                <option key={t.id || t._id || t.key} value={t.id || t._id || t.key}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* ── Topic Groups & Redesigned Question Cards ──────── */}
+      {/* ── Category Sections & Questions (Default CLOSED for clean view) ── */}
       {filteredTopics.length === 0 ? (
         <Card variant="bordered" className="p-12 text-center">
           <QuestionMarkCircleIcon className="mx-auto h-10 w-10 text-gray-300 stroke-1" />
           <h4 className="mt-3 text-sm font-bold text-gray-900 font-display">No questions match filter</h4>
           <p className="mt-1 text-xs text-gray-500 max-w-sm mx-auto">
-            Try adjusting your search query or reset the topic filter to see the complete discovery checklist.
+            Try adjusting your search query or reset the filter to view the discovery checklist.
           </p>
           <div className="mt-4 flex justify-center gap-2">
             <button
@@ -376,17 +439,18 @@ export default function DiscoveryQuestionsBoard({
                 setSelectedTopicFilter("all");
                 setQuestionStatusFilter("all");
               }}
-              className="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              className="rounded-xl border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-2xs"
             >
-              Clear Filters
+              Reset Filters
             </button>
           </div>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredTopics.map((topic, topicIdx) => {
             const topicKey = topic.id || topic._id || topic.key;
-            const isTopicCollapsed = Boolean(collapsedTopics[topicKey]);
+            // Topic is OPEN ONLY IF explicitly set to true in expandedTopicKeys
+            const isTopicOpen = Boolean(expandedTopicKeys[topicKey]);
             const qList = topic.questions || [];
 
             return (
@@ -394,54 +458,55 @@ export default function DiscoveryQuestionsBoard({
                 key={topicKey}
                 className="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs overflow-hidden transition"
               >
-                {/* Topic Header Accordion */}
+                {/* Topic Header: Clean, Crisp, Clickable Bar */}
                 <div
-                  className="p-4 flex items-center justify-between border-b border-[#F1F5F9] bg-[#F8FAFC] cursor-pointer hover:bg-gray-100/70 transition select-none"
-                  onClick={() => toggleTopicCollapsed(topicKey)}
+                  className="px-4 py-3 flex items-center justify-between bg-[#F8FAFC] cursor-pointer hover:bg-slate-100/70 transition select-none"
+                  onClick={() => toggleTopicExpand(topicKey)}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-100/80 text-[#2563EB] text-xs font-bold">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-100 text-[#2563EB] text-xs font-bold shrink-0">
                       {topicIdx + 1}
                     </span>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-[#0F172A] font-display">
+                        <h4 className="text-sm font-bold text-[#0F172A] font-display truncate">
                           {topic.title}
                         </h4>
-                        <span className="text-[11px] font-bold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                          {topic.answeredInTopic}/{topic.totalInTopic} Answered
+                        <span className="text-[11px] font-bold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60 shrink-0">
+                          {topic.answeredInTopic} / {topic.totalInTopic} Confirmed
                         </span>
                       </div>
                       {topic.description && (
-                        <p className="text-[11px] text-[#64748B] mt-0.5">{topic.description}</p>
+                        <p className="text-[11px] text-[#64748B] truncate mt-0.5">
+                          {topic.description}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  {/* Expand/Collapse Indicator */}
+                  <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs text-[#94A3B8] font-medium hidden sm:inline">
-                      {isTopicCollapsed ? "Show Questions" : "Hide"}
+                      {isTopicOpen ? "Close" : "Open"}
                     </span>
-                    <button
-                      type="button"
-                      className="p-1 text-gray-400 hover:text-gray-700 rounded-lg"
-                      aria-label="Toggle Topic"
-                    >
-                      {isTopicCollapsed ? (
-                        <ChevronDownIcon className="h-4 w-4" />
-                      ) : (
+                    <div className="p-1 text-gray-400 hover:text-gray-700 rounded-lg">
+                      {isTopicOpen ? (
                         <ChevronUpIcon className="h-4 w-4" />
+                      ) : (
+                        <ChevronDownIcon className="h-4 w-4" />
                       )}
-                    </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Question List inside Topic */}
-                {!isTopicCollapsed && (
-                  <div className="p-3.5 space-y-2.5">
+                {/* Question Items (Shown ONLY when topic is open) */}
+                {isTopicOpen && (
+                  <div className="border-t border-[#F1F5F9] divide-y divide-[#F1F5F9]">
                     {qList.map((question) => {
                       const qId = question.id || question._id;
-                      const isExpanded = Boolean(expandedQuestionIds[qId]);
+                      const isTipOpen = Boolean(expandedTips[qId]);
+                      const isMenuOpen = openStatusMenuId === qId;
+
                       const isAnswered = question.status === "answered";
                       const isAsked = question.status === "asked";
                       const isPending = question.status === "pending";
@@ -452,187 +517,206 @@ export default function DiscoveryQuestionsBoard({
                         <div
                           key={qId}
                           className={[
-                            "rounded-xl border transition-all duration-150",
+                            "p-3.5 sm:p-4 transition-colors",
                             isAnswered
-                              ? "border-emerald-200 bg-emerald-50/20"
+                              ? "bg-emerald-50/15"
                               : isAsked
-                              ? "border-amber-200 bg-amber-50/20"
-                              : isSuggested
-                              ? "border-purple-200 bg-purple-50/20"
+                              ? "bg-amber-50/15"
                               : isSkipped
-                              ? "border-gray-200 bg-gray-50 opacity-60"
-                              : "border-[#E2E8F0] bg-white hover:border-[#CBD5E1]",
+                              ? "bg-gray-50/50 opacity-60"
+                              : "hover:bg-[#F8FAFC]/70",
                           ].join(" ")}
                         >
-                          {/* Main Row */}
-                          <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            {/* Left: Badge + Question Text (Click expands context) */}
-                            <div
-                              className="flex items-start gap-2.5 flex-1 min-w-0 cursor-pointer"
-                              onClick={() => toggleQuestionExpanded(qId)}
-                            >
-                              <div className="mt-0.5">
-                                {isAnswered && <Badge variant="success" size="sm">Answered</Badge>}
-                                {isAsked && <Badge variant="warning" size="sm">In Discussion</Badge>}
-                                {isPending && <Badge variant="brand" size="sm">Backlog</Badge>}
-                                {isSuggested && <Badge variant="violet" size="sm">AI Suggested</Badge>}
-                                {isSkipped && <Badge variant="neutral" size="sm">Skipped</Badge>}
-                              </div>
+                          <div className="flex items-start justify-between gap-3">
+                            {/* Left: Quick-Toggle Checkbox + Question Content */}
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              {/* 1-Click Interactive Status Icon Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => handleQuickCycleStatus(question)}
+                                className="mt-0.5 shrink-0 transition-transform hover:scale-110 cursor-pointer focus:outline-none"
+                                title={
+                                  isAnswered
+                                    ? "Confirmed (Click to reopen)"
+                                    : isAsked
+                                    ? "In Discussion (Click to confirm answer)"
+                                    : "To Discuss (Click to mark in meeting)"
+                                }
+                              >
+                                {isAnswered ? (
+                                  <CheckCircleSolidIcon className="h-5 w-5 text-emerald-600" />
+                                ) : isAsked ? (
+                                  <ClockIcon className="h-5 w-5 text-amber-500" />
+                                ) : isSkipped ? (
+                                  <MinusCircleIcon className="h-5 w-5 text-gray-400" />
+                                ) : (
+                                  <div className="h-5 w-5 rounded-full border-2 border-[#CBD5E1] hover:border-[#2563EB] bg-white transition" />
+                                )}
+                              </button>
 
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs sm:text-sm font-semibold text-[#0F172A] leading-snug">
+                              {/* Question Text & Badges */}
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <p
+                                  className={[
+                                    "text-xs sm:text-sm leading-relaxed",
+                                    isAnswered
+                                      ? "font-semibold text-emerald-950"
+                                      : isAsked
+                                      ? "font-semibold text-amber-950"
+                                      : isSkipped
+                                      ? "line-through text-gray-500 font-normal"
+                                      : "font-semibold text-[#0F172A]",
+                                  ].join(" ")}
+                                >
                                   {question.text}
                                 </p>
 
-                                {/* Subtitle indicator if guidance / reason is available */}
-                                {question.reason && (
-                                  <p className="text-[11px] text-[#2563EB] flex items-center gap-1 mt-1 font-medium">
-                                    <LightBulbIcon className="h-3 w-3 shrink-0" />
-                                    <span>
-                                      {isExpanded ? "Hide meeting prep context" : "Click to view meeting prep tip"}
+                                {/* Context Tip & Note Pill Bar */}
+                                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                  {question.reason && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTipExpanded(qId)}
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2563EB] hover:text-[#1d4ed8] cursor-pointer"
+                                    >
+                                      <LightBulbIcon className="h-3 w-3 shrink-0" />
+                                      <span>{isTipOpen ? "Hide guidance" : "Why ask this?"}</span>
+                                    </button>
+                                  )}
+
+                                  {isAnswered && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveAnswerQuestion(question);
+                                        setAnswerInputText(question.answerText || "");
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline cursor-pointer"
+                                    >
+                                      <PencilSquareIcon className="h-3 w-3" />
+                                      <span>Edit Answer</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Expandable Guidance Prep Note */}
+                                {isTipOpen && question.reason && (
+                                  <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-2.5 text-xs text-[#334155] leading-relaxed mt-1 animate-fade-in">
+                                    <span className="font-bold text-[#0F172A] block text-[10px] uppercase tracking-wider mb-0.5">
+                                      Meeting Alignment Tip:
                                     </span>
-                                  </p>
+                                    {question.reason}
+                                  </div>
+                                )}
+
+                                {/* Recorded Confirmed Answer Block */}
+                                {question.answerText && (
+                                  <div className="rounded-xl border border-emerald-200 bg-white p-2.5 text-xs text-emerald-900 leading-relaxed shadow-3xs mt-1">
+                                    <span className="font-bold text-emerald-800 uppercase tracking-wider text-[10px] block mb-0.5">
+                                      Confirmed Requirement:
+                                    </span>
+                                    {question.answerText}
+                                  </div>
                                 )}
                               </div>
                             </div>
 
-                            {/* Right: Exactly 2 Quick Action Buttons with Instant Optimistic Background API */}
-                            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                              {/* Option set for AI Suggested */}
-                              {isSuggested && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAcceptSuggestion(qId)}
-                                    className="rounded-lg bg-[#7C3AED] px-2.5 py-1 text-xs font-semibold text-white hover:bg-purple-700 transition shadow-2xs"
-                                    title="Add to active discovery backlog"
-                                  >
-                                    Add to Backlog
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDismissSuggestion(qId)}
-                                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 transition shadow-2xs"
-                                    title="Dismiss this suggestion"
-                                  >
-                                    Dismiss
-                                  </button>
-                                </>
-                              )}
-
-                              {/* Option set for Pending */}
-                              {isPending && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleMarkAsked(qId)}
-                                    className="rounded-lg bg-[#2563EB] px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 transition shadow-2xs"
-                                    title="Mark as being discussed in alignment call"
-                                  >
-                                    Mark in Meeting
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSkipQuestion(qId)}
-                                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 transition shadow-2xs"
-                                    title="Skip question"
-                                  >
-                                    Skip
-                                  </button>
-                                </>
-                              )}
-
-                              {/* Option set for In Discussion (Asked) */}
-                              {isAsked && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleMarkAnswered(qId)}
-                                    className="rounded-lg bg-[#059669] px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 transition shadow-2xs"
-                                    title="Mark as confirmed & answered"
-                                  >
-                                    Mark Answered
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSkipQuestion(qId)}
-                                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 transition shadow-2xs"
-                                    title="Skip question"
-                                  >
-                                    Skip
-                                  </button>
-                                </>
-                              )}
-
-                              {/* Option set for Answered */}
-                              {isAnswered && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReopenQuestion(qId)}
-                                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
-                                    title="Reopen question for alignment"
-                                  >
-                                    Reopen
-                                  </button>
-                                </>
-                              )}
-
-                              {/* Option set for Skipped */}
-                              {isSkipped && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRestoreQuestion(qId)}
-                                  className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-100 transition shadow-2xs"
-                                  title="Restore question to discovery backlog"
-                                >
-                                  Restore
-                                </button>
-                              )}
-
-                              {/* Expand/Collapse Chevron */}
+                            {/* Right: Explicit Status Dropdown Pill */}
+                            <div className="relative shrink-0">
                               <button
                                 type="button"
-                                onClick={() => toggleQuestionExpanded(qId)}
-                                className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition ml-1"
-                                aria-label="Toggle details"
+                                onClick={() =>
+                                  setOpenStatusMenuId(isMenuOpen ? null : qId)
+                                }
+                                className={[
+                                  "inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-semibold border transition shadow-3xs cursor-pointer select-none",
+                                  isAnswered
+                                    ? "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                                    : isAsked
+                                    ? "bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100"
+                                    : isSuggested
+                                    ? "bg-purple-50 border-purple-300 text-purple-800 hover:bg-purple-100"
+                                    : isSkipped
+                                    ? "bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200"
+                                    : "bg-white border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]",
+                                ].join(" ")}
                               >
-                                {isExpanded ? (
-                                  <ChevronUpIcon className="h-4 w-4" />
-                                ) : (
-                                  <ChevronDownIcon className="h-4 w-4" />
-                                )}
+                                <span>
+                                  {isAnswered
+                                    ? "Confirmed"
+                                    : isAsked
+                                    ? "In Meeting"
+                                    : isSuggested
+                                    ? "AI Suggested"
+                                    : isSkipped
+                                    ? "Skipped"
+                                    : "To Discuss"}
+                                </span>
+                                <ChevronDownIcon className="h-3 w-3 opacity-60" />
                               </button>
-                            </div>
-                          </div>
 
-                          {/* Expandable Meeting Context & Helping Tip Drawer (No cluttered answer form!) */}
-                          {isExpanded && (
-                            <div className="px-4 pb-4 pt-1 border-t border-gray-100/90 bg-gray-50/50 space-y-2.5 animate-in fade-in duration-150">
-                              <div className="flex items-start gap-2 pt-2">
-                                <InformationCircleIcon className="h-4 w-4 text-[#2563EB] shrink-0 mt-0.5" />
-                                <div className="text-xs space-y-1">
-                                  <p className="font-bold text-[#0F172A]">
-                                    Meeting Preparation & Context Guidance:
-                                  </p>
-                                  <p className="text-gray-600 leading-relaxed">
-                                    {question.reason ||
-                                      "Ask this question during discovery meetings to clarify technical bounds, prevent architectural scope creep, and gather concrete acceptance criteria."}
-                                  </p>
-                                </div>
-                              </div>
+                              {/* Dropdown Options Menu */}
+                              {isMenuOpen && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-20"
+                                    onClick={() => setOpenStatusMenuId(null)}
+                                  />
+                                  <div className="absolute right-0 mt-1 z-30 w-44 rounded-2xl border border-[#E2E8F0] bg-white p-1.5 shadow-xl animate-scale-in">
+                                    <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                                      Change Status:
+                                    </p>
 
-                              {/* If previously answered or noted, show read-only record */}
-                              {question.answerText && (
-                                <div className="rounded-xl border border-emerald-200 bg-white p-3 text-xs">
-                                  <span className="font-bold text-emerald-800 uppercase tracking-wider text-[10px] block mb-1">
-                                    Recorded Discovery Answer:
-                                  </span>
-                                  <p className="italic text-gray-800">{question.answerText}</p>
-                                </div>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        applyOptimisticStatus(qId, "pending", "Set to To Discuss")
+                                      }
+                                      className="w-full flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs font-medium text-[#334155] hover:bg-[#F8FAFC] transition cursor-pointer"
+                                    >
+                                      <div className="h-2 w-2 rounded-full border border-blue-500" />
+                                      <span>To Discuss</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        applyOptimisticStatus(qId, "asked", "Marked as In Meeting")
+                                      }
+                                      className="w-full flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs font-medium text-[#334155] hover:bg-amber-50 hover:text-amber-900 transition cursor-pointer"
+                                    >
+                                      <ClockIcon className="h-3.5 w-3.5 text-amber-500" />
+                                      <span>In Meeting</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenStatusMenuId(null);
+                                        setActiveAnswerQuestion(question);
+                                        setAnswerInputText(question.answerText || "");
+                                      }}
+                                      className="w-full flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs font-semibold text-emerald-800 hover:bg-emerald-50 transition cursor-pointer"
+                                    >
+                                      <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-600" />
+                                      <span>Mark Confirmed</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        applyOptimisticStatus(qId, "skipped", "Question skipped")
+                                      }
+                                      className="w-full flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs font-medium text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+                                    >
+                                      <MinusCircleIcon className="h-3.5 w-3.5 text-gray-400" />
+                                      <span>Skip Question</span>
+                                    </button>
+                                  </div>
+                                </>
                               )}
                             </div>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
@@ -641,6 +725,68 @@ export default function DiscoveryQuestionsBoard({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Modal: Record Confirmed Answer Note ──────────────────────────── */}
+      {activeAnswerQuestion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 text-gray-900 shadow-2xl animate-scale-in">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircleIcon className="h-5 w-5 text-emerald-600" />
+                <h3 className="text-sm font-bold text-gray-900 font-display">
+                  Confirm Discovery Requirement
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveAnswerQuestion(null)}
+                className="rounded-lg p-1 text-gray-400 hover:text-gray-700"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAnswerNote} className="mt-4 space-y-3.5">
+              <div className="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-3 text-xs">
+                <span className="font-bold text-[#64748B] uppercase tracking-wider text-[10px] block mb-1">
+                  Question:
+                </span>
+                <p className="font-semibold text-[#0F172A]">{activeAnswerQuestion.text}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Confirmed Decision / Notes from Meeting (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={answerInputText}
+                  onChange={(e) => setAnswerInputText(e.target.value)}
+                  placeholder="Record key architectural decisions, stakeholder agreement, or SLA bounds..."
+                  className="w-full rounded-xl border border-gray-200 bg-white p-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setActiveAnswerQuestion(null)}
+                  className="rounded-xl border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingAnswer}
+                  className="rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition shadow-xs disabled:opacity-50"
+                >
+                  {isSavingAnswer ? "Saving…" : "Save & Confirm"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

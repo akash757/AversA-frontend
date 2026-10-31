@@ -85,7 +85,7 @@ export default function Navbar() {
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href={isLoggedIn ? (dashboardPath || "/dashboard") : "/"} className="flex items-center transition hover:opacity-90">
+        <Link href="/" className="flex items-center transition hover:opacity-90">
           <AversALogo size="sm" showTagline={false} inverted={darkMode} />
         </Link>
 

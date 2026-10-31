@@ -17,25 +17,25 @@ export default function Tabs({
 }) {
   const wrappers = {
     underline:
-      "flex items-end gap-0.5 border-b border-[#E2E8F0] overflow-x-auto scrollbar-hide",
+      "flex items-end gap-1 sm:gap-2 border-b border-[#E2E8F0] overflow-x-auto scrollbar-none",
     pill:
-      "flex items-center gap-1.5 bg-[#F1F5F9] rounded-[12px] p-1 overflow-x-auto scrollbar-hide",
+      "flex items-center gap-1.5 bg-[#F1F5F9] rounded-[12px] p-1 overflow-x-auto scrollbar-none",
     soft:
-      "flex items-center gap-1 overflow-x-auto scrollbar-hide",
+      "flex items-center gap-1 overflow-x-auto scrollbar-none",
   };
 
   const getItemClass = (tab) => {
     const isActive = tab.value === activeTab;
     const base =
-      "flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold transition-all duration-150 cursor-pointer select-none focus-visible:outline-none disabled:opacity-40 disabled:cursor-not-allowed";
+      "flex items-center gap-2 whitespace-nowrap text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer select-none focus-visible:outline-none disabled:opacity-40 disabled:cursor-not-allowed shrink-0";
 
     if (variant === "underline") {
       return [
         base,
-        "px-1 pb-3 pt-1 border-b-2 -mb-px",
+        "px-3.5 pb-3 pt-2 border-b-2 -mb-px",
         isActive
           ? "border-[#2563EB] text-[#2563EB]"
-          : "border-transparent text-[#94A3B8] hover:text-[#475569] hover:border-[#E2E8F0]",
+          : "border-transparent text-[#64748B] hover:text-[#0F172A] hover:border-[#CBD5E1]",
       ].join(" ");
     }
 
@@ -86,10 +86,10 @@ export default function Tabs({
           {tab.count !== undefined && (
             <span
               className={[
-                "inline-flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 min-w-[18px] h-[18px]",
+                "ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold px-2 py-0.5 min-w-[20px] h-[18px] shrink-0",
                 tab.value === activeTab
                   ? "bg-[#2563EB]/10 text-[#2563EB]"
-                  : "bg-[#F1F5F9] text-[#94A3B8]",
+                  : "bg-[#F1F5F9] text-[#64748B]",
               ].join(" ")}
             >
               {tab.count}
@@ -100,4 +100,3 @@ export default function Tabs({
     </div>
   );
 }
-

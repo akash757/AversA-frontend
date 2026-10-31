@@ -21,41 +21,49 @@ function resolveBaseUrl() {
 }
 
 export const BASE_URL = resolveBaseUrl();
-// Access token cookie expiry aligned with 15-minute access token lifetime
-const ACCESS_TOKEN_COOKIE_AGE = 60 * 15;
-// Refresh token cookie expiry aligned with 7-day session lifetime
-const REFRESH_TOKEN_COOKIE_AGE = 60 * 60 * 24 * 7;
+// Session cookie lifetime (7 days) matching backend refresh token expiration
+export const SESSION_COOKIE_AGE = 60 * 60 * 24 * 7;
 const REQUEST_TIMEOUT_MS = 60000; // Increased to 60s for long AI requests
+
+function getCookie(name) {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
 
 // Token helpers
 export function getAccessToken() {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("accessToken");
+  return localStorage.getItem("accessToken") || getCookie("accessToken");
 }
 
 export function getRefreshToken() {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("refreshToken");
+  return localStorage.getItem("refreshToken") || getCookie("refreshToken");
 }
 
 export function setTokens(accessToken, refreshToken) {
-  if (accessToken) localStorage.setItem("accessToken", accessToken);
-  if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+  if (typeof window !== "undefined") {
+    if (accessToken) localStorage.setItem("accessToken", accessToken);
+    if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+  }
   if (typeof document !== "undefined") {
     const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
     const secureFlag = isSecure ? "; Secure" : "";
     if (accessToken) {
-      document.cookie = `accessToken=${encodeURIComponent(accessToken)}; path=/; max-age=${ACCESS_TOKEN_COOKIE_AGE}; samesite=lax${secureFlag}`;
+      document.cookie = `accessToken=${encodeURIComponent(accessToken)}; path=/; max-age=${SESSION_COOKIE_AGE}; samesite=lax${secureFlag}`;
     }
     if (refreshToken) {
-      document.cookie = `refreshToken=${encodeURIComponent(refreshToken)}; path=/; max-age=${REFRESH_TOKEN_COOKIE_AGE}; samesite=lax${secureFlag}`;
+      document.cookie = `refreshToken=${encodeURIComponent(refreshToken)}; path=/; max-age=${SESSION_COOKIE_AGE}; samesite=lax${secureFlag}`;
     }
   }
 }
 
 export function clearTokens() {
-  localStorage.removeItem("accessToken");
-  localStorage.removeItem("refreshToken");
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+  }
   if (typeof document !== "undefined") {
     const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
     const secureFlag = isSecure ? "; Secure" : "";
@@ -227,7 +235,11 @@ async function request(endpoint, options = {}) {
 
   // Attach Bearer token for authenticated requests (proactively refreshing if expired).
   if (auth) {
-    const token = await getValidAccessToken();
+    let token = getAccessToken();
+    if (isTokenExpired(token) && getRefreshToken()) {
+      await silentRefresh();
+      token = getAccessToken();
+    }
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -268,8 +280,9 @@ async function request(endpoint, options = {}) {
 
       // Refresh failed, clear tokens and route to login.
       clearTokens();
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/login?next=${next}`;
       }
 
       return {

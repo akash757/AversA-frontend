@@ -2,24 +2,34 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getMe, logout } from "@/features/auth/auth";
-import { getAccessToken, getRefreshToken, silentRefresh, isTokenExpired } from "@/lib/api/api";
+import {
+  getAccessToken,
+  getRefreshToken,
+  silentRefresh,
+  clearTokens,
+  isTokenExpired,
+} from "@/lib/api/api";
 
 const SESSION_COOKIE_AGE = 60 * 60 * 24 * 7;
 
 function setUserCookies(user) {
   if (typeof document === "undefined" || !user) return;
+  const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+  const secureFlag = isSecure ? "; Secure" : "";
   if (user.role) {
-    document.cookie = `userRole=${encodeURIComponent(user.role)}; path=/; max-age=${SESSION_COOKIE_AGE}; samesite=lax`;
+    document.cookie = `userRole=${encodeURIComponent(user.role)}; path=/; max-age=${SESSION_COOKIE_AGE}; samesite=lax${secureFlag}`;
   }
   if (user.status) {
-    document.cookie = `userStatus=${encodeURIComponent(user.status)}; path=/; max-age=${SESSION_COOKIE_AGE}; samesite=lax`;
+    document.cookie = `userStatus=${encodeURIComponent(user.status)}; path=/; max-age=${SESSION_COOKIE_AGE}; samesite=lax${secureFlag}`;
   }
 }
 
 function clearUserCookies() {
   if (typeof document === "undefined") return;
-  document.cookie = "userRole=; path=/; max-age=0; samesite=lax";
-  document.cookie = "userStatus=; path=/; max-age=0; samesite=lax";
+  const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+  const secureFlag = isSecure ? "; Secure" : "";
+  document.cookie = `userRole=; path=/; max-age=0; samesite=lax${secureFlag}`;
+  document.cookie = `userStatus=; path=/; max-age=0; samesite=lax${secureFlag}`;
 }
 
 const AuthContext = createContext({
@@ -37,9 +47,15 @@ export function AuthProvider({ children }) {
 
   const fetchUser = useCallback(async () => {
     let token = getAccessToken();
+    const refreshToken = getRefreshToken();
 
-    // Silently refresh before fetching if token is expired or expiring
-    if ((!token || isTokenExpired(token)) && getRefreshToken()) {
+    if (!token && !refreshToken) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    if ((!token || isTokenExpired(token)) && refreshToken) {
       const refreshed = await silentRefresh();
       if (refreshed) {
         token = getAccessToken();
@@ -48,6 +64,7 @@ export function AuthProvider({ children }) {
 
     if (!token) {
       setUser(null);
+      clearTokens();
       setLoading(false);
       return;
     }
@@ -57,13 +74,12 @@ export function AuthProvider({ children }) {
       if (res.success && res.data?.user) {
         setUser(res.data.user);
         setUserCookies(res.data.user);
-      } else {
+      } else if (res.status === 401) {
         setUser(null);
-        clearUserCookies();
+        clearTokens();
       }
-    } catch {
-      setUser(null);
-      clearUserCookies();
+    } catch (error) {
+      console.error("Failed to load user profile:", error);
     } finally {
       setLoading(false);
     }
