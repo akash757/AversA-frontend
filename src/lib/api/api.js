@@ -1,19 +1,28 @@
 /**
  * API Client - central fetch wrapper for backend calls.
  *
- * - Base URL comes from NEXT_PUBLIC_API_BASE_URL.
+ * - Base URL resolves safely without baking in private internal IP addresses.
+ * - Defaults to relative /api in browser environments under reverse proxy.
  * - Attaches JWT access token for authenticated requests.
  * - Handles 401 with silent refresh and retry.
- * - Returns a normalized response envelope and avoids uncaught throws.
+ * - Enforces short-lived secure session cookies.
  */
 
 function resolveBaseUrl() {
-  const raw = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://172.16.7.16:5000/api").trim().replace(/\/+$/, "");
-  return raw.endsWith("/api") ? raw : `${raw}/api`;
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+    const raw = process.env.NEXT_PUBLIC_API_BASE_URL.trim().replace(/\/+$/, "");
+    return raw.endsWith("/api") ? raw : `${raw}/api`;
+  }
+  // Browser fallback defaults to relative /api under reverse proxy (preventing private IP leaks)
+  if (typeof window !== "undefined") {
+    return "/api";
+  }
+  return process.env.NODE_ENV === "production" ? "/api" : "http://localhost:5000/api";
 }
 
 const BASE_URL = resolveBaseUrl();
-const SESSION_COOKIE_AGE = 60 * 60 * 24 * 7;
+// Access token cookie expiry aligned with 15-minute access token lifetime
+const ACCESS_TOKEN_COOKIE_AGE = 60 * 15;
 const REQUEST_TIMEOUT_MS = 60000; // Increased to 60s for long AI requests
 
 // Token helpers
@@ -31,7 +40,9 @@ export function setTokens(accessToken, refreshToken) {
   localStorage.setItem("accessToken", accessToken);
   if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
   if (typeof document !== "undefined" && accessToken) {
-    document.cookie = `accessToken=${encodeURIComponent(accessToken)}; path=/; max-age=${SESSION_COOKIE_AGE}; samesite=lax`;
+    const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+    const secureFlag = isSecure ? "; Secure" : "";
+    document.cookie = `accessToken=${encodeURIComponent(accessToken)}; path=/; max-age=${ACCESS_TOKEN_COOKIE_AGE}; samesite=lax${secureFlag}`;
   }
 }
 
@@ -39,9 +50,11 @@ export function clearTokens() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
   if (typeof document !== "undefined") {
-    document.cookie = "accessToken=; path=/; max-age=0; samesite=lax";
-    document.cookie = "userRole=; path=/; max-age=0; samesite=lax";
-    document.cookie = "userStatus=; path=/; max-age=0; samesite=lax";
+    const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+    const secureFlag = isSecure ? "; Secure" : "";
+    document.cookie = `accessToken=; path=/; max-age=0; samesite=lax${secureFlag}`;
+    document.cookie = `userRole=; path=/; max-age=0; samesite=lax${secureFlag}`;
+    document.cookie = `userStatus=; path=/; max-age=0; samesite=lax${secureFlag}`;
   }
 }
 
