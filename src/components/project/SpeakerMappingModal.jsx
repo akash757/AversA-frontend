@@ -58,7 +58,7 @@ export default function SpeakerMappingModal({
 
         if (!isMounted) return;
 
-        const groups = speakersRes?.data?.groups || [];
+        const groups = speakersRes?.data?.speakers || speakersRes?.data?.groups || [];
         setSpeakerGroups(groups);
         setUnlabeledCount(speakersRes?.data?.unlabeledLineCount || 0);
 
@@ -79,9 +79,11 @@ export default function SpeakerMappingModal({
               isDecisionMaker: Boolean(g.participant.isDecisionMaker),
             };
           } else {
-            // Check if displayLabel matches an existing participant
+            // Check if displayLabel or suggested name matches an existing participant
             const exactMatch = loadedParticipants.find(
-              (p) => p.displayName?.toLowerCase().trim() === g.displayLabel?.toLowerCase().trim()
+              (p) =>
+                p.displayName?.toLowerCase().trim() === g.displayLabel?.toLowerCase().trim() ||
+                (g.suggestion?.displayName && p.displayName?.toLowerCase().trim() === g.suggestion.displayName.toLowerCase().trim())
             );
 
             if (exactMatch) {
@@ -89,17 +91,26 @@ export default function SpeakerMappingModal({
                 mode: "existing",
                 participantId: exactMatch.id || exactMatch._id,
                 displayName: exactMatch.displayName,
-                party: exactMatch.party || "client",
-                jobTitle: exactMatch.jobTitle || "",
+                party: exactMatch.party || g.suggestion?.party || "client",
+                jobTitle: exactMatch.jobTitle || g.suggestion?.jobTitle || "",
                 isDecisionMaker: Boolean(exactMatch.isDecisionMaker),
+              };
+            } else if (g.suggestion?.participantId) {
+              initial[key] = {
+                mode: "existing",
+                participantId: g.suggestion.participantId,
+                displayName: g.suggestion.displayName || g.displayLabel,
+                party: g.suggestion.party || "client",
+                jobTitle: g.suggestion.jobTitle || "",
+                isDecisionMaker: false,
               };
             } else {
               initial[key] = {
                 mode: "new",
                 participantId: "",
-                displayName: g.displayLabel,
-                party: "client",
-                jobTitle: "",
+                displayName: g.suggestion?.displayName || g.displayLabel,
+                party: g.suggestion?.party || "client",
+                jobTitle: g.suggestion?.jobTitle || "",
                 isDecisionMaker: false,
               };
             }

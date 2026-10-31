@@ -240,8 +240,9 @@ export default function DeepDiscoveryTranscripts({
         }
 
         // If unmapped speakers detected, open speaker mapping modal
-        if (res.data?.transcript?.status === "needs_speaker_mapping") {
-          setMappingTranscript(res.data.transcript);
+        const createdTranscript = res.data?.transcript || res.data;
+        if (createdTranscript?.status === "needs_speaker_mapping") {
+          setMappingTranscript(createdTranscript);
         }
       } else {
         toast?.error(res?.message || "Failed to index transcript.");
@@ -285,8 +286,9 @@ export default function DeepDiscoveryTranscripts({
     try {
       const trnId = t.id || t._id;
       const res = await getTranscriptById(trnId, true);
-      if (res?.success && res.data?.transcript) {
-        setSelectedTranscript(res.data.transcript);
+      const transcriptData = res?.data?.transcript || res?.data;
+      if (res?.success && transcriptData) {
+        setSelectedTranscript(transcriptData);
       }
     } catch {
       // Keep summary view if full fetch fails
