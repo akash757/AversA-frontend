@@ -1,0 +1,16 @@
+#!/bin/sh
+echo "🔍 [Pre-Commit Hook] Running Frontend verification check..."
+
+npm run build
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+  echo ""
+  echo "❌ [Pre-Commit Hook] Frontend build check failed! Commit aborted."
+  echo "Please resolve build errors before committing."
+  exit 1
+fi
+
+echo "✅ [Pre-Commit Hook] Frontend verification passed!"
+exit 0
+
