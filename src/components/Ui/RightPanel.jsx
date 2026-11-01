@@ -98,7 +98,7 @@ export function RightPanel({
 /**
  * RightPanel.Header — sticky header with title + close button
  */
-RightPanel.Header = function RightPanelHeader({ title, onClose, children, className = "" }) {
+export function RightPanelHeader({ title, onClose, children, className = "" }) {
   return (
     <div
       className={[
@@ -127,7 +127,7 @@ RightPanel.Header = function RightPanelHeader({ title, onClose, children, classN
 /**
  * RightPanel.Body — scrollable content area
  */
-RightPanel.Body = function RightPanelBody({ className = "", children }) {
+export function RightPanelBody({ className = "", children }) {
   return (
     <div className={["flex-1 overflow-y-auto px-5 py-5", className].join(" ")}>
       {children}
@@ -138,7 +138,7 @@ RightPanel.Body = function RightPanelBody({ className = "", children }) {
 /**
  * RightPanel.Footer — sticky footer
  */
-RightPanel.Footer = function RightPanelFooter({ className = "", children }) {
+export function RightPanelFooter({ className = "", children }) {
   return (
     <div
       className={[
@@ -150,6 +150,10 @@ RightPanel.Footer = function RightPanelFooter({ className = "", children }) {
     </div>
   );
 };
+
+RightPanel.Header = RightPanelHeader;
+RightPanel.Body = RightPanelBody;
+RightPanel.Footer = RightPanelFooter;
 
 export default RightPanel;
 

@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Universal Card — AversA Design System
  *
@@ -89,5 +87,6 @@ Card.Header = CardHeader;
 Card.Body   = CardBody;
 Card.Footer = CardFooter;
 
+export { CardHeader, CardBody, CardFooter };
 export default Card;
 
