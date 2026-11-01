@@ -17,13 +17,16 @@ import {
   MinusCircleIcon,
   ArrowsPointingOutIcon,
   ArrowsPointingInIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import { CheckCircleIcon as CheckCircleSolidIcon } from "@heroicons/react/24/solid";
-import Badge from "@/components/Ui/Badge";
 import Button from "@/components/Ui/Button";
 import Card from "@/components/Ui/Card";
 import ProgressBar from "@/components/Ui/ProgressBar";
-import { updateProjectQuestion } from "@/features/project/project";
+import {
+  updateProjectQuestion,
+  regenerateProjectAiSuggestions,
+} from "@/features/project/project";
 
 export default function DiscoveryQuestionsBoard({
   projectId,
@@ -39,10 +42,16 @@ export default function DiscoveryQuestionsBoard({
   const [selectedTopicFilter, setSelectedTopicFilter] = useState("all");
   const [questionStatusFilter, setQuestionStatusFilter] = useState("all");
 
-  // Track expanded topics: by default EMPTY ({}), meaning ALL TOPICS ARE CLOSED BY DEFAULT
-  const [expandedTopicKeys, setExpandedTopicKeys] = useState({});
+  // Track expanded topics: by default, first topic is expanded or user toggles
+  const [expandedTopicKeys, setExpandedTopicKeys] = useState(() => {
+    if (topics && topics.length > 0) {
+      const firstKey = topics[0].id || topics[0]._id || topics[0].key;
+      return firstKey ? { [firstKey]: true } : {};
+    }
+    return {};
+  });
 
-  // Question detail tips expanded state
+  // Question guidance detail expanded state
   const [expandedTips, setExpandedTips] = useState({});
 
   // Active status dropdown menu for a specific question ID
@@ -52,6 +61,9 @@ export default function DiscoveryQuestionsBoard({
   const [activeAnswerQuestion, setActiveAnswerQuestion] = useState(null);
   const [answerInputText, setAnswerInputText] = useState("");
   const [isSavingAnswer, setIsSavingAnswer] = useState(false);
+
+  // AI Generation Loading State
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
 
   // Toggle individual topic
   const toggleTopicExpand = (topicKey) => {
@@ -96,12 +108,12 @@ export default function DiscoveryQuestionsBoard({
         .then((res) => {
           if (!res?.success) {
             setTopics(previousTopics);
-            toast?.error?.(res?.message || "Could not update status.");
+            toast?.error?.(res?.message || "Could not update question status.");
           }
         })
         .catch((err) => {
           setTopics(previousTopics);
-          toast?.error?.(err?.message || "Failed to update status. Restored previous state.");
+          toast?.error?.(err?.message || "Failed to update question status.");
         });
     },
     [projectId, setTopics, toast]
@@ -115,8 +127,29 @@ export default function DiscoveryQuestionsBoard({
     } else if (question.status === "asked") {
       setActiveAnswerQuestion(question);
       setAnswerInputText(question.answerText || "");
+    } else if (question.status === "suggested") {
+      applyOptimisticStatus(qId, "pending", "Accepted AI question into checklist");
     } else {
       applyOptimisticStatus(qId, "asked", "Marked as In Discussion");
+    }
+  };
+
+  // Trigger AI Question Generation
+  const handleGenerateAiQuestions = async () => {
+    if (!projectId || isGeneratingAi) return;
+    setIsGeneratingAi(true);
+    try {
+      const res = await regenerateProjectAiSuggestions(projectId);
+      if (res?.success) {
+        toast?.success?.("AI discovery suggestions generated successfully!");
+        onRefreshQuestions?.();
+      } else {
+        toast?.error?.(res?.message || "Could not generate AI suggestions.");
+      }
+    } catch {
+      toast?.error?.("Failed to generate AI suggestions.");
+    } finally {
+      setIsGeneratingAi(false);
     }
   };
 
@@ -146,7 +179,7 @@ export default function DiscoveryQuestionsBoard({
           prev.map((topic) => ({
             ...topic,
             questions: (topic.questions || []).map((q) =>
-              (q.id === qId || q._id === qId) ? { ...q, ...patchPayload } : q
+              q.id === qId || q._id === qId ? { ...q, ...patchPayload } : q
             ),
           }))
         );
@@ -163,7 +196,7 @@ export default function DiscoveryQuestionsBoard({
   };
 
   // Metrics across all questions
-  const { allQuestions, stats } = useMemo(() => {
+  const stats = useMemo(() => {
     const list = topics.flatMap((t) => t.questions || []);
     const total = list.length;
     const answered = list.filter((q) => q.status === "answered").length;
@@ -173,10 +206,7 @@ export default function DiscoveryQuestionsBoard({
     const skipped = list.filter((q) => q.status === "skipped").length;
     const progress = total > 0 ? Math.round((answered / total) * 100) : 0;
 
-    return {
-      allQuestions: list,
-      stats: { total, answered, asked, pending, suggested, skipped, progress },
-    };
+    return { total, answered, asked, pending, suggested, skipped, progress };
   }, [topics]);
 
   // Filtered topics
@@ -231,10 +261,8 @@ export default function DiscoveryQuestionsBoard({
   // Toggle All Topics (Open All / Close All)
   const handleToggleAllTopics = () => {
     if (areAllTopicsOpen) {
-      // Close all
       setExpandedTopicKeys({});
     } else {
-      // Open all
       const allOpen = {};
       filteredTopics.forEach((t) => {
         const key = t.id || t._id || t.key;
@@ -246,91 +274,51 @@ export default function DiscoveryQuestionsBoard({
 
   return (
     <div className="space-y-4">
-      {/* ── AI Suggestions Banner (Only if pending suggestions exist) ────── */}
-      {suggestionStatus === "ready" && stats.suggested > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-purple-200 bg-purple-50/70 p-3.5 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white shadow-xs">
-              <SparklesIcon className="h-4 w-4" />
+      {/* ── Executive Discovery Overview & AI Assistant Toolbar ───────────── */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4 sm:p-5 shadow-xs space-y-4">
+        {/* Row 1: Workspace Title, Progress Metrics & Primary Actions */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1.5 min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-base sm:text-lg font-bold text-[#0F172A] font-display">
+                Discovery Checklist
+              </h2>
+              <span className="rounded-full bg-blue-50 border border-blue-200/80 text-[#2563EB] text-xs font-bold px-2.5 py-0.5">
+                {stats.answered} of {stats.total} Confirmed ({stats.progress}%)
+              </span>
             </div>
-            <div>
-              <p className="text-xs font-bold text-purple-950 font-display">
-                {stats.suggested} AI Discovery Recommendations
-              </p>
-              <p className="text-[11px] text-purple-800">
-                Tailored questions generated from your project brief ready for review.
-              </p>
-            </div>
+            <p className="text-xs text-[#64748B]">
+              Validate technical boundaries, architecture constraints, and scope items with your stakeholders.
+            </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setQuestionStatusFilter("suggested")}
-            className="rounded-xl bg-purple-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 transition shadow-xs cursor-pointer self-start sm:self-auto"
-          >
-            Review Suggestions ({stats.suggested})
-          </button>
-        </div>
-      )}
-
-      {/* ── Discovery Control Strip (High-Clarity, Zero Overlap) ─────────── */}
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs p-4 space-y-3.5">
-        {/* Tier 1: Title, Coverage Metric, Global Expand/Collapse Toggle & Add Question */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#F1F5F9] pb-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-[#0F172A] font-display">
-                  Discovery Checklist
-                </h3>
-                <span className="rounded-full bg-blue-50 border border-blue-200/80 text-[#2563EB] text-[11px] font-bold px-2 py-0.5">
-                  {stats.answered} / {stats.total} Confirmed
-                </span>
-              </div>
-              <p className="text-xs text-[#64748B] mt-0.5">
-                Technical, operational, and delivery questions to validate with stakeholders.
-              </p>
-            </div>
-          </div>
-
-          {/* Right Action Controls: Expand/Collapse All + Add Question */}
-          <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
-            {/* Live Progress Bar */}
-            <div className="hidden lg:flex items-center gap-2 text-xs font-bold text-[#0F172A] mr-2">
-              <span>{stats.progress}%</span>
-              <div className="w-24">
-                <ProgressBar value={stats.progress} color="brand" size="sm" />
-              </div>
-            </div>
-
-            {/* Toggle All Topics (Open All / Close All) */}
+          {/* Action buttons on the right */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* AI Generate Questions Button */}
             <Button
-              variant="outline"
+              variant="soft"
               size="sm"
-              onClick={handleToggleAllTopics}
+              onClick={handleGenerateAiQuestions}
+              disabled={isGeneratingAi}
               leftIcon={
-                areAllTopicsOpen ? (
-                  <ArrowsPointingInIcon className="h-4 w-4 text-[#2563EB]" />
+                isGeneratingAi ? (
+                  <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-[#2563EB]" />
                 ) : (
-                  <ArrowsPointingOutIcon className="h-4 w-4 text-[#2563EB]" />
+                  <SparklesIcon className="h-3.5 w-3.5 text-[#2563EB]" />
                 )
               }
-              title={
-                areAllTopicsOpen
-                  ? "Collapse all question categories"
-                  : "Expand all question categories"
-              }
+              title="Generate contextual questions using AversA AI"
             >
-              {areAllTopicsOpen ? "Close All" : "Open All"}
+              {isGeneratingAi ? "Generating…" : "Generate Questions"}
             </Button>
 
-            {/* Add Question Button */}
+            {/* Add Custom Question Button */}
             {onAddQuestionClick && (
               <Button
                 variant="primary"
                 size="sm"
                 onClick={onAddQuestionClick}
-                leftIcon={<PlusIcon className="h-4 w-4" />}
+                leftIcon={<PlusIcon className="h-3.5 w-3.5" />}
               >
                 Add Question
               </Button>
@@ -338,59 +326,68 @@ export default function DiscoveryQuestionsBoard({
           </div>
         </div>
 
-        {/* Tier 2: Status Filter Tabs (Dedicated Row: Never Overlaps!) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {[
-            { key: "all", label: "All Questions", count: stats.total },
-            { key: "pending", label: "To Discuss", count: stats.pending },
-            { key: "asked", label: "In Meeting", count: stats.asked },
-            { key: "answered", label: "Confirmed", count: stats.answered },
-            ...(stats.suggested > 0
-              ? [{ key: "suggested", label: "AI Suggested", count: stats.suggested }]
-              : []),
-            ...(stats.skipped > 0
-              ? [{ key: "skipped", label: "Skipped", count: stats.skipped }]
-              : []),
-          ].map((tab) => {
-            const isActive = questionStatusFilter === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setQuestionStatusFilter(tab.key)}
-                className={[
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer select-none shrink-0",
-                  isActive
-                    ? "bg-[#0F172A] text-white shadow-xs"
-                    : "bg-[#F8FAFC] text-[#475569] border border-[#E2E8F0] hover:bg-white hover:text-[#0F172A]",
-                ].join(" ")}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={[
-                    "rounded-full px-1.5 py-0.2 text-[10px] font-bold",
-                    isActive
-                      ? "bg-white/20 text-white"
-                      : "bg-[#E2E8F0] text-[#475569]",
-                  ].join(" ")}
-                >
-                  {tab.count}
+        {/* Progress Bar & Status Metric Strip */}
+        <div className="pt-2 border-t border-[#F1F5F9] space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#64748B]">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span>
+                  <strong className="text-[#0F172A]">{stats.answered}</strong> Confirmed
                 </span>
-              </button>
-            );
-          })}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span>
+                  <strong className="text-[#0F172A]">{stats.asked}</strong> In Meeting
+                </span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-[#94A3B8]" />
+                <span>
+                  <strong className="text-[#0F172A]">{stats.pending}</strong> To Discuss
+                </span>
+              </span>
+            </div>
+            <span className="font-semibold text-[#0F172A]">{stats.progress}% Completed</span>
+          </div>
+
+          <ProgressBar value={stats.progress} color="brand" size="sm" />
         </div>
 
-        {/* Tier 3: Search Input & Category Filter Dropdown */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-[#F1F5F9]">
-          <div className="relative flex-1">
+        {/* AI Recommendations Notification Strip (Subtle & Restrained) */}
+        {suggestionStatus === "ready" && stats.suggested > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-blue-200/70 bg-blue-50/50 p-3 text-xs">
+            <div className="flex items-center gap-2">
+              <SparklesIcon className="h-4 w-4 text-[#2563EB] shrink-0" />
+              <p className="text-[#1E40AF] font-medium">
+                <strong>{stats.suggested} AI Discovery Recommendations</strong> available based on your project brief.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setQuestionStatusFilter("suggested")}
+              className="text-[#2563EB] font-bold hover:underline cursor-pointer shrink-0 self-start sm:self-auto"
+            >
+              Review Recommendations →
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Unified Workspace Toolbar (Search, Filter Tabs & Category Selector) */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Left: Search input + Status Filter Tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1 min-w-0">
+          {/* Search box */}
+          <div className="relative w-full sm:w-64 shrink-0">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#94A3B8]" />
             <input
               type="text"
               value={questionSearchQuery}
               onChange={(e) => setQuestionSearchQuery(e.target.value)}
-              placeholder="Search questions or criteria..."
-              className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] pl-8 pr-7 py-2 text-xs text-[#0F172A] placeholder:text-[#94A3B8] focus:bg-white focus:border-[#2563EB] focus:outline-none transition shadow-2xs"
+              placeholder="Filter checklist..."
+              className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] pl-8 pr-7 py-1.5 text-xs text-[#0F172A] placeholder:text-[#94A3B8] focus:bg-white focus:border-[#2563EB] focus:outline-none transition shadow-2xs"
             />
             {questionSearchQuery && (
               <button
@@ -403,33 +400,92 @@ export default function DiscoveryQuestionsBoard({
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-semibold text-[#64748B] hidden sm:inline">
-              Category:
-            </span>
-            <select
-              value={selectedTopicFilter}
-              onChange={(e) => setSelectedTopicFilter(e.target.value)}
-              className="rounded-xl border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-semibold text-[#0F172A] focus:border-[#2563EB] focus:outline-none shadow-2xs"
-            >
-              <option value="all">All Categories ({topics.length})</option>
-              {topics.map((t) => (
-                <option key={t.id || t._id || t.key} value={t.id || t._id || t.key}>
-                  {t.title}
-                </option>
-              ))}
-            </select>
+          {/* Status filter pills */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
+            {[
+              { key: "all", label: "All", count: stats.total },
+              { key: "pending", label: "To Discuss", count: stats.pending },
+              { key: "asked", label: "In Meeting", count: stats.asked },
+              { key: "answered", label: "Confirmed", count: stats.answered },
+              ...(stats.suggested > 0
+                ? [{ key: "suggested", label: "AI Suggestions", count: stats.suggested }]
+                : []),
+              ...(stats.skipped > 0
+                ? [{ key: "skipped", label: "Skipped", count: stats.skipped }]
+                : []),
+            ].map((tab) => {
+              const isActive = questionStatusFilter === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setQuestionStatusFilter(tab.key)}
+                  className={[
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer select-none shrink-0",
+                    isActive
+                      ? "bg-[#0F172A] text-white shadow-xs"
+                      : "bg-[#F8FAFC] text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A]",
+                  ].join(" ")}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={[
+                      "rounded-full px-1.5 py-0.2 text-[10px] font-bold",
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-[#E2E8F0] text-[#64748B]",
+                    ].join(" ")}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
+        </div>
+
+        {/* Right: Category selector + Expand/Collapse all */}
+        <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-[#F1F5F9]">
+          <select
+            value={selectedTopicFilter}
+            onChange={(e) => setSelectedTopicFilter(e.target.value)}
+            className="rounded-xl border border-[#E2E8F0] bg-white px-2.5 py-1.5 text-xs font-medium text-[#0F172A] focus:border-[#2563EB] focus:outline-none shadow-2xs"
+          >
+            <option value="all">All Categories ({topics.length})</option>
+            {topics.map((t) => (
+              <option key={t.id || t._id || t.key} value={t.id || t._id || t.key}>
+                {t.title}
+              </option>
+            ))}
+          </select>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToggleAllTopics}
+            leftIcon={
+              areAllTopicsOpen ? (
+                <ArrowsPointingInIcon className="h-3.5 w-3.5 text-[#2563EB]" />
+              ) : (
+                <ArrowsPointingOutIcon className="h-3.5 w-3.5 text-[#2563EB]" />
+              )
+            }
+            title={areAllTopicsOpen ? "Collapse all categories" : "Expand all categories"}
+          >
+            {areAllTopicsOpen ? "Collapse All" : "Expand All"}
+          </Button>
         </div>
       </div>
 
-      {/* ── Category Sections & Questions (Default CLOSED for clean view) ── */}
+      {/* ── Category Sections & Questions (Interactive Workspace Layout) ─── */}
       {filteredTopics.length === 0 ? (
         <Card variant="bordered" className="p-12 text-center">
           <QuestionMarkCircleIcon className="mx-auto h-10 w-10 text-gray-300 stroke-1" />
-          <h4 className="mt-3 text-sm font-bold text-gray-900 font-display">No questions match filter</h4>
+          <h4 className="mt-3 text-sm font-bold text-gray-900 font-display">
+            No questions match your filter
+          </h4>
           <p className="mt-1 text-xs text-gray-500 max-w-sm mx-auto">
-            Try adjusting your search query or reset the filter to view the discovery checklist.
+            Try adjusting your search criteria or resetting the status filter to see all checklist items.
           </p>
           <div className="mt-4 flex justify-center gap-2">
             <button
@@ -439,7 +495,7 @@ export default function DiscoveryQuestionsBoard({
                 setSelectedTopicFilter("all");
                 setQuestionStatusFilter("all");
               }}
-              className="rounded-xl border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-2xs"
+              className="rounded-xl border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-2xs cursor-pointer"
             >
               Reset Filters
             </button>
@@ -449,30 +505,33 @@ export default function DiscoveryQuestionsBoard({
         <div className="space-y-3">
           {filteredTopics.map((topic, topicIdx) => {
             const topicKey = topic.id || topic._id || topic.key;
-            // Topic is OPEN ONLY IF explicitly set to true in expandedTopicKeys
             const isTopicOpen = Boolean(expandedTopicKeys[topicKey]);
             const qList = topic.questions || [];
+            const topicProgress =
+              topic.totalInTopic > 0
+                ? Math.round((topic.answeredInTopic / topic.totalInTopic) * 100)
+                : 0;
 
             return (
               <div
                 key={topicKey}
                 className="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs overflow-hidden transition"
               >
-                {/* Topic Header: Clean, Crisp, Clickable Bar */}
+                {/* Topic Header */}
                 <div
                   className="px-4 py-3 flex items-center justify-between bg-[#F8FAFC] cursor-pointer hover:bg-slate-100/70 transition select-none"
                   onClick={() => toggleTopicExpand(topicKey)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-100 text-[#2563EB] text-xs font-bold shrink-0">
-                      {topicIdx + 1}
+                      {topicIdx + 1 < 10 ? `0${topicIdx + 1}` : topicIdx + 1}
                     </span>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-[#0F172A] font-display truncate">
+                        <h3 className="text-sm font-bold text-[#0F172A] font-display truncate">
                           {topic.title}
-                        </h4>
-                        <span className="text-[11px] font-bold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60 shrink-0">
+                        </h3>
+                        <span className="text-[11px] font-semibold text-[#2563EB] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60 shrink-0">
                           {topic.answeredInTopic} / {topic.totalInTopic} Confirmed
                         </span>
                       </div>
@@ -484,11 +543,17 @@ export default function DiscoveryQuestionsBoard({
                     </div>
                   </div>
 
-                  {/* Expand/Collapse Indicator */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-[#94A3B8] font-medium hidden sm:inline">
-                      {isTopicOpen ? "Close" : "Open"}
-                    </span>
+                  {/* Right: Progress bar & Expand/Collapse */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="hidden sm:flex items-center gap-2 text-xs text-[#64748B]">
+                      <div className="w-16">
+                        <ProgressBar value={topicProgress} color="brand" size="sm" />
+                      </div>
+                      <span className="font-semibold text-[#0F172A] text-[11px]">
+                        {topicProgress}%
+                      </span>
+                    </div>
+
                     <div className="p-1 text-gray-400 hover:text-gray-700 rounded-lg">
                       {isTopicOpen ? (
                         <ChevronUpIcon className="h-4 w-4" />
@@ -499,7 +564,7 @@ export default function DiscoveryQuestionsBoard({
                   </div>
                 </div>
 
-                {/* Question Items (Shown ONLY when topic is open) */}
+                {/* Question Items (Shown when category is open) */}
                 {isTopicOpen && (
                   <div className="border-t border-[#F1F5F9] divide-y divide-[#F1F5F9]">
                     {qList.map((question) => {
@@ -519,18 +584,20 @@ export default function DiscoveryQuestionsBoard({
                           className={[
                             "p-3.5 sm:p-4 transition-colors",
                             isAnswered
-                              ? "bg-emerald-50/15"
+                              ? "bg-emerald-50/20"
                               : isAsked
-                              ? "bg-amber-50/15"
+                              ? "bg-amber-50/20"
+                              : isSuggested
+                              ? "bg-blue-50/15"
                               : isSkipped
-                              ? "bg-gray-50/50 opacity-60"
-                              : "hover:bg-[#F8FAFC]/70",
+                              ? "bg-gray-50/40 opacity-60"
+                              : "hover:bg-[#F8FAFC]/80",
                           ].join(" ")}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            {/* Left: Quick-Toggle Checkbox + Question Content */}
+                            {/* Left: Interactive Checkbox & Content */}
                             <div className="flex items-start gap-3 flex-1 min-w-0">
-                              {/* 1-Click Interactive Status Icon Toggle */}
+                              {/* 1-Click Interactive Status Icon */}
                               <button
                                 type="button"
                                 onClick={() => handleQuickCycleStatus(question)}
@@ -540,6 +607,8 @@ export default function DiscoveryQuestionsBoard({
                                     ? "Confirmed (Click to reopen)"
                                     : isAsked
                                     ? "In Discussion (Click to confirm answer)"
+                                    : isSuggested
+                                    ? "AI Suggested (Click to accept into checklist)"
                                     : "To Discuss (Click to mark in meeting)"
                                 }
                               >
@@ -547,6 +616,8 @@ export default function DiscoveryQuestionsBoard({
                                   <CheckCircleSolidIcon className="h-5 w-5 text-emerald-600" />
                                 ) : isAsked ? (
                                   <ClockIcon className="h-5 w-5 text-amber-500" />
+                                ) : isSuggested ? (
+                                  <SparklesIcon className="h-5 w-5 text-[#2563EB]" />
                                 ) : isSkipped ? (
                                   <MinusCircleIcon className="h-5 w-5 text-gray-400" />
                                 ) : (
@@ -554,8 +625,8 @@ export default function DiscoveryQuestionsBoard({
                                 )}
                               </button>
 
-                              {/* Question Text & Badges */}
-                              <div className="min-w-0 flex-1 space-y-1">
+                              {/* Question Content */}
+                              <div className="min-w-0 flex-1 space-y-1.5">
                                 <p
                                   className={[
                                     "text-xs sm:text-sm leading-relaxed",
@@ -565,19 +636,21 @@ export default function DiscoveryQuestionsBoard({
                                       ? "font-semibold text-amber-950"
                                       : isSkipped
                                       ? "line-through text-gray-500 font-normal"
+                                      : isSuggested
+                                      ? "font-semibold text-[#1E3A8A]"
                                       : "font-semibold text-[#0F172A]",
                                   ].join(" ")}
                                 >
                                   {question.text}
                                 </p>
 
-                                {/* Context Tip & Note Pill Bar */}
+                                {/* Context Tip & Inline Action Buttons */}
                                 <div className="flex flex-wrap items-center gap-2 pt-0.5">
                                   {question.reason && (
                                     <button
                                       type="button"
                                       onClick={() => toggleTipExpanded(qId)}
-                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2563EB] hover:text-[#1d4ed8] cursor-pointer"
+                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-[#2563EB] hover:text-[#1d4ed8] cursor-pointer"
                                     >
                                       <LightBulbIcon className="h-3 w-3 shrink-0" />
                                       <span>{isTipOpen ? "Hide guidance" : "Why ask this?"}</span>
@@ -595,6 +668,37 @@ export default function DiscoveryQuestionsBoard({
                                     >
                                       <PencilSquareIcon className="h-3 w-3" />
                                       <span>Edit Answer</span>
+                                    </button>
+                                  )}
+
+                                  {isAsked && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveAnswerQuestion(question);
+                                        setAnswerInputText(question.answerText || "");
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-100/70 hover:bg-amber-200/80 px-2 py-0.5 rounded-md cursor-pointer transition"
+                                    >
+                                      <CheckIcon className="h-3 w-3" />
+                                      <span>Record Decision</span>
+                                    </button>
+                                  )}
+
+                                  {isSuggested && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        applyOptimisticStatus(
+                                          qId,
+                                          "pending",
+                                          "Accepted AI question into checklist"
+                                        )
+                                      }
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded-md cursor-pointer transition"
+                                    >
+                                      <CheckIcon className="h-3 w-3" />
+                                      <span>Accept Question</span>
                                     </button>
                                   )}
                                 </div>
@@ -635,7 +739,7 @@ export default function DiscoveryQuestionsBoard({
                                     : isAsked
                                     ? "bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100"
                                     : isSuggested
-                                    ? "bg-purple-50 border-purple-300 text-purple-800 hover:bg-purple-100"
+                                    ? "bg-blue-50 border-blue-300 text-blue-800 hover:bg-blue-100"
                                     : isSkipped
                                     ? "bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200"
                                     : "bg-white border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]",
@@ -742,7 +846,7 @@ export default function DiscoveryQuestionsBoard({
               <button
                 type="button"
                 onClick={() => setActiveAnswerQuestion(null)}
-                className="rounded-lg p-1 text-gray-400 hover:text-gray-700"
+                className="rounded-lg p-1 text-gray-400 hover:text-gray-700 cursor-pointer"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
@@ -773,14 +877,14 @@ export default function DiscoveryQuestionsBoard({
                 <button
                   type="button"
                   onClick={() => setActiveAnswerQuestion(null)}
-                  className="rounded-xl border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  className="rounded-xl border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingAnswer}
-                  className="rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition shadow-xs disabled:opacity-50"
+                  className="rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition shadow-xs disabled:opacity-50 cursor-pointer"
                 >
                   {isSavingAnswer ? "Saving…" : "Save & Confirm"}
                 </button>

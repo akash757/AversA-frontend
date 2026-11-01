@@ -520,40 +520,33 @@ export default function ProjectWorkspacePage() {
     return [
       {
         value: "questions",
-        label: "Discovery Questions",
-        count: `${stats.answered}/${stats.total}`,
-        icon: <QuestionMarkCircleIcon className="h-4 w-4" />,
+        label: "Discovery Checklist",
       },
       {
         value: "transcripts",
         label: "Deep Discovery Transcripts",
-        count: transcripts.length,
-        icon: <DocumentTextIcon className="h-4 w-4" />,
+        count: transcripts.length > 0 ? transcripts.length : undefined,
       },
       {
         value: "meetings",
         label: "Alignments & Calls",
-        count: meetings.length,
-        icon: <CalendarDaysIcon className="h-4 w-4" />,
+        count: meetings.length > 0 ? meetings.length : undefined,
       },
       {
         value: "items",
         label: "Discovered Items",
-        icon: <DocumentCheckIcon className="h-4 w-4" />,
       },
       {
         value: "baselines",
-        label: "Baselines",
-        icon: <ShieldCheckIcon className="h-4 w-4" />,
+        label: "Requirement Baselines",
       },
       {
         value: "contacts",
         label: "Stakeholders",
-        count: contacts.length,
-        icon: <UserGroupIcon className="h-4 w-4" />,
+        count: contacts.length > 0 ? contacts.length : undefined,
       },
     ];
-  }, [stats.answered, stats.total, transcripts.length, meetings.length, contacts.length]);
+  }, [transcripts.length, meetings.length, contacts.length]);
 
   if (isLoading && !project) return <Skeleton.ProjectDetail />;
 
