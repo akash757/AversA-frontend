@@ -2,105 +2,108 @@
 
 This document tracks client-side user interface, state management, and API integrations in the **`frontend`** repository.
 
-> **Status**: All Discovery, AI Analysis, Extracted Items Review, Hierarchical Follow-Ups, and Requirement Baseline frontend modules are **Fully Implemented and Verified**.
-
-
----
-
-## 1. Speaker Review & Mapping UI Workflow
-- [x] **1.1. Add API Functions in `frontend/src/features/transcript/transcript.js`**:
-  - `getTranscriptSpeakers(transcriptId)`
-  - `mapTranscriptSpeakers(transcriptId, mappings)`
-- [x] **1.2. Create `SpeakerMappingModal.jsx` in `frontend/src/components/project/`**:
-  - Triggered from transcript card when status is `needs_speaker_mapping`.
-  - Autocompletes existing participants via `GET /api/projects/:projectId/participants`.
-  - Supports inline creation of new participants (`client`, `internal`, `third_party`) with roles and decision-maker flags.
-- [x] **1.3. Update `DeepDiscoveryTranscripts.jsx`**:
-  - Displays distinct badges: `Needs Speaker Mapping` (Amber) vs `Speakers Mapped` (Emerald).
-  - One-click trigger opens `SpeakerMappingModal`.
+> **Rule & Strict Scope**: This document **STRICTLY AND ONLY** tracks tasks, APIs, data contracts, and events that are **already implemented and live in `backend` (or `ai-backend`)**, but are **not yet integrated / implemented in `frontend`**. Speculative features, future backend roadmaps, or purely frontend visual redesigns without a backing backend capability must never be added.
 
 ---
 
-## 2. Triggering AI Transcript Analysis & Real-Time Polling
-- [x] **2.1. Add `triggerTranscriptAnalysis(transcriptId)` in `frontend/src/features/transcript/transcript.js`**:
-  - Calls `POST /api/transcripts/:transcriptId/analysis`.
-- [x] **2.2. Add "Analyze Transcript" Action Button in `DeepDiscoveryTranscripts.jsx`**:
-  - Shows primary action button on ready transcripts.
-  - While `analysisStatus === 'running'`, displays pulse animation with *"AI Analyzing Dialogue..."*.
-- [x] **2.3. Implement Polling and State Transition**:
-  - Auto-polls status every 4 seconds while running.
-  - On transition to `ready`: Displays discovered item and follow-up count pills with one-click *"View Discovered Items $\rightarrow$"* navigation.
-  - On transition to `failed`: Displays retry button.
+## 📌 Pending Frontend Implementations (Backend Ready & Live)
+
+### 1. Real-Time Server-Sent Events (SSE) Stream Integration (`GET /api/projects/:id/events`)
+- **Backend Capability Live**:
+  - Route: `GET /api/projects/:id/events` (protected, authorized for all internal roles: managers, sales, developers, designers, QA, DevOps).
+  - Stream headers: `text/event-stream`, `Connection: keep-alive`, `X-Accel-Buffering: no`.
+  - Heartbeat: Sends `: keep-alive\n\n` comments every 25 seconds.
+  - Events Broadcast:
+    - `transcript.analysis.started`: `{ transcriptId, projectId, status: "running", startedAt }`
+    - `transcript.analysis.completed`: `{ transcriptId, projectId, status: "ready", itemsSaved, followUpsSaved }`
+    - `transcript.analysis.failed`: `{ transcriptId, projectId, status: "failed", error }`
+    - `suggestions.started`: `{ projectId, status: "running", startedAt }`
+    - `suggestions.completed`: `{ projectId, status: "ready", validAdds, validMarks, briefTooThin }`
+    - `suggestions.failed`: `{ projectId, status: "failed", error }`
+- **Pending Frontend Tasks**:
+  - [ ] **1.1. Create `useProjectSSE(projectId)` Hook**:
+    - Connect to `GET /api/projects/:id/events` via native `EventSource` (with `withCredentials: true` / cookies).
+    - Handle reconnect on tab resume or network drop with exponential backoff.
+  - [ ] **1.2. Wire Real-Time State Invalidation (Zero Page Refresh Needed)**:
+    - On `transcript.analysis.started`: Set local transcript card `analysisStatus = "running"` and activate pulse animation.
+    - On `transcript.analysis.completed`: Set `analysisStatus = "ready"`, invalidate queries for extracted items (`/api/transcripts/:id/items`) and follow-ups (`/api/projects/:id/questions`), show completion toast.
+    - On `transcript.analysis.failed`: Set `analysisStatus = "failed"` and render retry action button.
+    - On `suggestions.started`: Set project `suggestionStatus = "running"`.
+    - On `suggestions.completed`: Set project `suggestionStatus = "ready"`, invalidate questions query to display newly generated questions and skipped recommendations in real-time.
+    - On `suggestions.failed`: Set project `suggestionStatus = "failed"`, show actionable error alert.
 
 ---
 
-## 3. Extracted Items Review Board (Answers, Decisions, Requirements, Actions)
-- [x] **3.1. Create `frontend/src/features/items/item.js`**:
-  - `getTranscriptItems(transcriptId, { type, status })`
-  - `updateExtractedItem(itemId, { status, text, ownerParticipantId, dueDate, dueText, replaceAnswer })`
-- [x] **3.2. Build `ExtractedItemsBoard.jsx` in `frontend/src/components/project/`**:
-  - Category Filter Tabs: All, Answers, Decisions, Requirements, Action Items.
-  - Status filters: `all`, `proposed` (amber), `accepted` (emerald), `rejected` (gray).
-  - In-place Accept, Reject, and Revert-to-Proposed buttons.
-  - Action item participant owner selector and due-date picker.
-  - Summary metrics banner with instant counts.
-- [x] **3.3. Build Line Evidence Drawer (`EvidenceDrawer.jsx`)**:
-  - Slide-over drawer displaying highlighted transcript utterances, line numbers, and speaker labels linked to the selected extracted item.
-- [x] **3.4. Handle 409 Conflict on Answer Acceptance**:
-  - Detects HTTP 409 Conflict and prompts user with confirmation modal: *"This question was already answered. Replace the existing answer with this new answer?"*
-  - On confirmation, resends with `replaceAnswer: true`.
+### 2. Unified Multi-Entity Keyword Search UI (`GET /api/projects/:id/search?keyword=...`)
+- **Backend Capability Live**:
+  - Route: `GET /api/projects/:id/search?keyword=...` (in `backend/src/routes/project.route.ts`).
+  - Search Scope: Performs case-insensitive matching across **Meetings** (`title`, `description`, `notes`), **Project Questions** (`text`, `answerText`), and **Transcripts** (`name`, `sourceFormat`).
+  - API Client Ready: `searchProjectByKeyword(projectId, keyword)` in `frontend/src/features/project/project.js`.
+- **Pending Frontend Tasks**:
+  - [ ] **2.1. Project Workspace Search Bar**:
+    - Add search input in `ProjectHeader.jsx` or top navigation of `projects/[projectId]/page.js`.
+  - [ ] **2.2. Search Results Drawer / Dropdown**:
+    - Render unified search results grouped by category: **Meetings**, **Questions & Answers**, and **Transcripts**.
+    - Show highlighted text snippets and timestamp/date badges.
+    - Implement 1-click jump links that switch tabs and focus on the matched entity.
 
 ---
 
-## 4. Hierarchical Follow-Up Questions UI & Discussion Sheet
-- [x] **4.1. Update Questions Tab in `frontend/src/app/(dashboard)/projects/[projectId]/page.js`**:
-  - **Threaded View**: Render clarifying follow-up questions indented directly under their answered parent question with a "Clarifying Follow-Up" badge.
-  - **New Discovery Gaps Callout**: Render orphan follow-ups (`parentQuestionId === null`) in an alert callout box highlighting newly uncovered requirements.
-- [x] **4.2. Follow-Up Action Controls**:
-  - "Approve Question" button promotes suggested follow-ups into active `pending` questions for meetings.
-  - "Dismiss" button to skip non-relevant follow-ups.
-- [x] **4.3. Build `DiscussionSheetModal.jsx`**:
-  - Clean printable / copyable discussion sheet for upcoming client meetings with formatted question checklist grouped by topic.
+### 3. Participant Profile & Metadata Management (`GET /api/projects/:id/participants`, `PATCH /api/participants/:id`)
+- **Backend Capability Live**:
+  - Routes:
+    - `GET /api/projects/:id/participants` (lists all participants with utterance stats, aliases, party, role, decisionMaker flag).
+    - `PATCH /api/participants/:id` (accepts `{ displayName, party, jobTitle, isDecisionMaker, userId, clientContactId }` in `backend/src/routes/participant.route.ts`).
+- **Pending Frontend Tasks**:
+  - [ ] **3.1. Add `updateParticipant` in `frontend/src/features/transcript/transcript.js`**:
+    - `PATCH /api/participants/:id` accepting `{ displayName, party, jobTitle, isDecisionMaker, clientContactId, userId }`.
+  - [ ] **3.2. Build Participant Management View in Project Workspace**:
+    - Display project participant roster table with utterance statistics, identified aliases, party badge (`internal`, `client`, `third_party`), and decision-maker star icon.
+    - Provide inline / modal editor to update job title, party, decision-maker status, or associate with a user or client contact.
 
 ---
 
-## 5. Rate Limiting (HTTP 429) Handling
-- [x] **5.1. Update `frontend/src/lib/api/api.js` Error Handling**:
-  - Detects HTTP status 429 and returns structured `{ isRateLimited: true, retryAfter: 900, message }`.
+### 4. Client Contact to Participant Association (`PATCH /api/participants/:id` with `clientContactId`)
+- **Backend Capability Live**:
+  - Backend schema: `Participant` model has relation `clientContact ClientContact? @relation(fields: [clientContactId], references: [id])`.
+  - Validator: `speaker.validator.ts` accepts `clientContactId` on both participant creation and participant update.
+- **Pending Frontend Tasks**:
+  - [ ] **4.1. Contact-to-Participant Linking in Contacts Tab**:
+    - In `projects/[projectId]/page.js` (Contacts modal), allow selecting a detected transcript participant to link to the contact record (`clientContactId`).
+    - Show linked participant badge with direct link to view their dialogue turns and mapped utterances.
 
 ---
 
-## 6. Production Health & Diagnostic Status Panel
-- [x] **6.1. Add AI Service Status Indicator in `frontend/src/app/(dashboard)/settings/page.js`**:
-  - "AI Inference Engine Diagnostic" panel that pings `/api/health/ai` with live green/red dot and roundtrip latency in ms.
-- [x] **6.2. Conditional API Docs Link**:
-  - Interactive API docs link in settings page is conditionally rendered only in development mode (`process.env.NODE_ENV !== "production"`).
+### 5. Raw Transcript Export / Download Action (`GET /api/transcripts/:id?includeRawText=true`)
+- **Backend Capability Live**:
+  - Route: `GET /api/transcripts/:id?includeRawText=true` (in `backend/src/services/transcript.service.ts`).
+  - Returns `rawText` payload when `includeRawText=true` query parameter is provided.
+- **Pending Frontend Tasks**:
+  - [ ] **5.1. Add "Download Raw Transcript" Action in `DeepDiscoveryTranscripts.jsx`**:
+    - Add button / menu option on transcript cards to download or copy the raw uploaded transcript text.
 
 ---
 
-## 7. Requirement Baselines: Draft Snapshot & Version Viewer
-- [x] **7.1. Add Baseline API Client in `frontend/src/features/baseline/baseline.js`**:
-  - `createDraftBaseline(projectId, { note })`
-  - `getProjectBaselines(projectId)`
-  - `getLatestConfirmedBaseline(projectId)`
-  - `getBaselineById(baselineId)`
-  - `addBaselineItem(baselineId, payload)`
-  - `updateBaselineItem(baselineId, itemId, payload)`
-  - `deleteBaselineItem(baselineId, itemId)`
-  - `updateBaselineNote(baselineId, { note })`
-  - `confirmBaseline(baselineId, { acknowledgeWarnings })`
-  - `discardDraftBaseline(baselineId)`
-- [x] **7.2. Build `BaselineManager.jsx` in `frontend/src/components/project/`**:
-  - Baseline version history selector (`vX [status]`).
-  - "Build New Baseline Draft" action button.
-  - Ordered items list with category filtering (All, Requirements, Decisions, Answers).
-  - Draft manual item creator modal (`+ Add Manual Item`).
-  - Inline and modal snapshot item editor.
-  - Item removal from draft snapshot only.
-  - Release notes editor with save/clear.
-  - "Discard Draft" modal.
-- [x] **7.3. Build Baseline Freeze & Confirmation Modal**:
-  - Available to `product_manager`, `admin`, and `superadmin`.
-  - Pre-flight readiness check displays warning checklist for open questions, proposed items, and suggested follow-ups.
-  - `acknowledgeWarnings: true` confirmation checkbox advances project stage to `requirements_confirmed`.
+### 6. Discussion Sheet One-Click Meeting Attachment (`PUT /api/meetings/:id`)
+- **Backend Capability Live**:
+  - Route: `PUT /api/meetings/:id` (in `backend/src/routes/meeting.route.ts`).
+  - Accepts `{ title, description, notes, startTime, endTime, status }`.
+- **Pending Frontend Tasks**:
+  - [ ] **6.1. Attach Sheet to Meeting in `DiscussionSheetModal.jsx`**:
+    - Add "Attach to Scheduled Meeting" button with dropdown of upcoming meetings for the project.
+    - Appends the formatted question checklist directly into the meeting's `notes` or `description` via `PUT /api/meetings/:id`.
 
+---
+
+## ✅ Completed Frontend Implementations
+
+- [x] **Speaker Review & Mapping Modal (`SpeakerMappingModal.jsx`)**: Autocompletion, inline participant creation, suggestion prefill via `GET /api/projects/:id/participants` and `POST /api/transcripts/:id/speakers/map`.
+- [x] **AI Transcript Analysis Pipeline**: Action button, status badges (`running`, `ready`, `failed`), and initial polling mechanism via `POST /api/transcripts/:id/analyze`.
+- [x] **Extracted Items Review Board (`ExtractedItemsBoard.jsx`)**: Categories (Answers, Decisions, Requirements, Actions), status filters (`proposed`, `accepted`, `rejected`), inline text editing, owner/due-date picker via `GET /api/transcripts/:id/items` and `PATCH /api/items/:id`.
+- [x] **Answer Conflict Resolution Modal**: 409 conflict detection with `replaceAnswer: true` modal.
+- [x] **Grounding Evidence Drawer (`EvidenceDrawer.jsx`)**: Verbatim dialogue turn slider with speaker tags and timestamps.
+- [x] **Hierarchical Follow-Up Questions**: Threaded clarifying follow-ups under parent questions and orphan discovery gap callouts.
+- [x] **Discussion Sheet Generator (`DiscussionSheetModal.jsx`)**: Printable and copyable formatted meeting agenda and questions checklist.
+- [x] **Requirement Baselines (`BaselineManager.jsx`)**: Draft baseline builder, manual item addition, release notes editor, and pre-flight Freeze & Confirm modal via `POST /api/projects/:id/baselines`, `GET /api/projects/:id/baselines`, `GET /api/baselines/:id`, and `POST /api/baselines/:id/confirm`.
+- [x] **AI Service Diagnostic Panel**: Live `/api/health/ai` ping and roundtrip latency display in settings.
+- [x] **Dual-Cookie Session Continuity & Proactive Refresh**: 15m access token + 7d refresh token cookies, Next.js middleware protection (`hasSession`), pre-flight token check (`getValidAccessToken`), and 10m background heartbeat.
