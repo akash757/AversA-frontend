@@ -15,7 +15,7 @@ import Tabs from "@/components/Ui/Tabs";
 import Input from "@/components/Ui/Input";
 import Select from "@/components/Ui/Select";
 import EmptyState from "@/components/Ui/EmptyState";
-import Skeleton from "@/components/Ui/Skeleton";
+import Skeleton, { SkeletonDashboard } from "@/components/Ui/Skeleton";
 
 // Dashboard Components
 import ProjectCard from "@/components/dashboard/ProjectCard";
@@ -255,7 +255,7 @@ export default function DashboardPage() {
     ];
   }, [projects]);
 
-  if (isLoading) return <Skeleton.Dashboard />;
+  if (isLoading) return <SkeletonDashboard />;
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">

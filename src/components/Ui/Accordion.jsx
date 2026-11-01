@@ -116,5 +116,6 @@ function AccordionItem({
 
 Accordion.Item = AccordionItem;
 
+export { AccordionItem };
 export default Accordion;
 

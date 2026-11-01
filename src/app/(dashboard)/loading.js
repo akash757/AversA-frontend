@@ -1,5 +1,6 @@
-import Skeleton from "@/components/Ui/Skeleton";
+import Skeleton, { SkeletonDashboard } from "@/components/Ui/Skeleton";
 
 export default function DashboardLoading() {
-  return <Skeleton.Dashboard />;
+  return <SkeletonDashboard />;
 }
+

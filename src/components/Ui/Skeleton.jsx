@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Skeleton — AversA Design System
  *
@@ -63,7 +61,7 @@ export default function Skeleton({
 /**
  * Skeleton.Group — stacked line skeletons for text blocks
  */
-Skeleton.Group = function SkeletonGroup({ lines = 3, className = "" }) {
+export function SkeletonGroup({ lines = 3, className = "" }) {
   const widths = ["100%", "85%", "70%", "90%", "60%"];
   return (
     <div className={["space-y-2", className].join(" ")} aria-hidden="true">
@@ -72,12 +70,12 @@ Skeleton.Group = function SkeletonGroup({ lines = 3, className = "" }) {
       ))}
     </div>
   );
-};
+}
 
 /**
  * Skeleton.StatCard — KPI stat card skeleton matching dashboard metrics
  */
-Skeleton.StatCard = function SkeletonStatCard({ className = "" }) {
+export function SkeletonStatCard({ className = "" }) {
   return (
     <div
       className={`rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-xs ${className}`}
@@ -93,12 +91,12 @@ Skeleton.StatCard = function SkeletonStatCard({ className = "" }) {
       </div>
     </div>
   );
-};
+}
 
 /**
  * Skeleton.ProjectCard — Project card skeleton matching ProjectCard.jsx
  */
-Skeleton.ProjectCard = function SkeletonProjectCard({ className = "" }) {
+export function SkeletonProjectCard({ className = "" }) {
   return (
     <div
       className={`flex flex-col justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-xs ${className}`}
@@ -140,7 +138,7 @@ Skeleton.ProjectCard = function SkeletonProjectCard({ className = "" }) {
 /**
  * Skeleton.MeetingCard — Meeting card skeleton matching MeetingCard.js
  */
-Skeleton.MeetingCard = function SkeletonMeetingCard({ className = "" }) {
+export function SkeletonMeetingCard({ className = "" }) {
   return (
     <div
       className={`rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-xs ${className}`}
@@ -169,7 +167,7 @@ Skeleton.MeetingCard = function SkeletonMeetingCard({ className = "" }) {
 /**
  * Skeleton.Table — Generic table skeleton with headers and rows
  */
-Skeleton.Table = function SkeletonTable({ rows = 5, columns = 4, className = "" }) {
+export function SkeletonTable({ rows = 5, columns = 4, className = "" }) {
   return (
     <div
       className={`overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-xs ${className}`}
@@ -203,7 +201,7 @@ Skeleton.Table = function SkeletonTable({ rows = 5, columns = 4, className = "" 
 /**
  * Skeleton.ProjectDetail — Complete project workspace skeleton
  */
-Skeleton.ProjectDetail = function SkeletonProjectDetail({ className = "" }) {
+export function SkeletonProjectDetail({ className = "" }) {
   return (
     <div className={`space-y-6 ${className}`} aria-hidden="true">
       {/* Breadcrumb skeleton */}
@@ -271,7 +269,7 @@ Skeleton.ProjectDetail = function SkeletonProjectDetail({ className = "" }) {
 /**
  * Skeleton.Dashboard — Dashboard page skeleton
  */
-Skeleton.Dashboard = function SkeletonDashboard({ className = "" }) {
+export function SkeletonDashboard({ className = "" }) {
   return (
     <div className={`space-y-7 animate-fade-in ${className}`} aria-hidden="true">
       {/* Welcome banner */}
@@ -291,10 +289,10 @@ Skeleton.Dashboard = function SkeletonDashboard({ className = "" }) {
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Skeleton.StatCard />
-        <Skeleton.StatCard />
-        <Skeleton.StatCard />
-        <Skeleton.StatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
+        <SkeletonStatCard />
       </div>
 
       {/* Discovery Funnel */}
@@ -318,10 +316,10 @@ Skeleton.Dashboard = function SkeletonDashboard({ className = "" }) {
             <Skeleton variant="line" width="4rem" height="0.875rem" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Skeleton.ProjectCard />
-            <Skeleton.ProjectCard />
-            <Skeleton.ProjectCard />
-            <Skeleton.ProjectCard />
+            <SkeletonProjectCard />
+            <SkeletonProjectCard />
+            <SkeletonProjectCard />
+            <SkeletonProjectCard />
           </div>
         </div>
 
@@ -331,12 +329,22 @@ Skeleton.Dashboard = function SkeletonDashboard({ className = "" }) {
             <Skeleton variant="line" width="4rem" height="0.875rem" />
           </div>
           <div className="space-y-3">
-            <Skeleton.MeetingCard />
-            <Skeleton.MeetingCard />
-            <Skeleton.MeetingCard />
+            <SkeletonMeetingCard />
+            <SkeletonMeetingCard />
+            <SkeletonMeetingCard />
           </div>
         </div>
       </div>
     </div>
   );
-};
+}
+
+// Compound component properties for backwards compatibility
+Skeleton.Group = SkeletonGroup;
+Skeleton.StatCard = SkeletonStatCard;
+Skeleton.ProjectCard = SkeletonProjectCard;
+Skeleton.MeetingCard = SkeletonMeetingCard;
+Skeleton.Table = SkeletonTable;
+Skeleton.ProjectDetail = SkeletonProjectDetail;
+Skeleton.Dashboard = SkeletonDashboard;
+
